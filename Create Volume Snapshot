@@ -1,0 +1,27 @@
+--- Step 1: Get the Volume ID:-
+
+aws ec2 describe-volumes \
+  --region us-east-1 \
+  --filters "Name=tag:Name,Values=datacenter-vol" \
+  --query "Volumes[*].VolumeId" \
+  --output json
+
+
+
+--- Step 2: Create the Snapshot:-
+
+aws ec2 create-snapshot \
+  --region us-east-1 \
+  --volume-id vol-0123456789abcdef0 \
+  --description "datacenter Snapshot" \
+  --tag-specifications 'ResourceType=snapshot,Tags=[{Key=Name,Value=datacenter-vol-ss}]'
+
+
+
+--- Step 3: Verify Snapshot Status:-
+
+aws ec2 describe-snapshots \
+  --region us-east-1 \
+  --snapshot-ids snap-0123456789abcdef0 \
+  --query "Snapshots[*].State" \
+  --output json
