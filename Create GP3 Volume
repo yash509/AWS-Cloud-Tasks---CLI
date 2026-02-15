@@ -1,0 +1,5 @@
+aws ec2 create-volume \
+  --volume-type gp3 \
+  --size 2 \
+  --availability-zone us-east-1a \
+  --tag-specifications 'ResourceType=volume,Tags=[{Key=Name,Value=datacenter-volume}]'
