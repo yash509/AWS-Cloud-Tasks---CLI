@@ -1,0 +1,69 @@
+CMD -> aws s3api get-bucket-versioning --bucket <bucket-name>  (cmd to check versioning is enabled or not)
+
+If versioning is enabled:
+
+json
+{
+    "Status": "Enabled"
+}
+
+If versioning is suspended:
+
+json
+{
+    "Status": "Suspended"
+}
+
+-------------------------------------------------------------------------
+
+Steps to Enable Versioning in S3 ->
+
+Step 1: Create a Policy JSON File
+Save the following as s3-versioning-policy.json:
+
+json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetBucketVersioning",
+                "s3:PutBucketVersioning"
+            ],
+            "Resource": "arn:aws:s3:::<bucket-name>"
+        }
+    ]
+}
+
+
+
+Step 2: Attach the Policy to a User:-
+
+aws iam put-user-policy \
+    --user-name <IAM-user-name> \
+    --policy-name S3VersioningPolicy \
+    --policy-document file://s3-versioning-policy.json
+	
+Step 3: Attach the Policy to a Role (if using roles):-
+
+aws iam put-role-policy \
+    --role-name <role-name> \
+    --policy-name S3VersioningPolicy \
+    --policy-document file://s3-versioning-policy.json
+	
+Step 4: Attach the Policy to a Group (if using groups):-
+
+aws iam put-group-policy \
+    --group-name <group-name> \
+    --policy-name S3VersioningPolicy \
+    --policy-document file://s3-versioning-policy.json
+	
+	
+-------------------------------------------------------------------------------
+CMD -> To remove Versioning
+
+aws s3api put-bucket-versioning \
+    --bucket <bucket-name> \
+    --versioning-configuration Status=Suspended
+
