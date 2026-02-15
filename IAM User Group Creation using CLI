@@ -1,0 +1,11 @@
+--- Step 1: Create the Group:-
+
+aws iam create-group \
+  --group-name iamgroup_anita
+
+
+
+--- Step 2: Verify the Group:-
+
+aws iam get-group \
+  --group-name iamgroup_anita
