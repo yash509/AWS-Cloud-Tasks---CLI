@@ -1,0 +1,46 @@
+--- Step 1: Verify Instance Initialization:-
+
+aws ec2 describe-instance-status \
+  --region us-east-1 \
+  --filters "Name=tag:Name,Values=devops-ec2" \
+  --include-all-instances
+
+
+
+--- Step 2: Get the Instance ID:-
+
+aws ec2 describe-instances \
+  --region us-east-1 \
+  --filters "Name=tag:Name,Values=devops-ec2" \
+  --query "Reservations[*].Instances[*].InstanceId" \
+  --output text
+
+
+
+--- Step 3: Get the Network Interface ID:-
+
+aws ec2 describe-network-interfaces \
+  --region us-east-1 \
+  --filters "Name=tag:Name,Values=devops-eni" \
+  --query "NetworkInterfaces[*].NetworkInterfaceId" \
+  --output text
+
+
+
+--- Step 4: Attach the ENI to the Instance:-
+
+aws ec2 attach-network-interface \
+  --region us-east-1 \
+  --network-interface-id eni-0123456789abcdef0 \
+  --instance-id i-0abcd1234efgh5678 \
+  --device-index 1
+
+
+
+--- Step 5: Verify Attachment Status:-
+
+aws ec2 describe-network-interfaces \
+  --region us-east-1 \
+  --network-interface-ids eni-0123456789abcdef0 \
+  --query "NetworkInterfaces[*].Attachment.Status" \
+  --output text
