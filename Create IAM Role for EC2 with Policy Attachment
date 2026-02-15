@@ -1,0 +1,45 @@
+--- Step 1: Create a Trust Policy for EC2:- (Save the following JSON into a file named trust-policy.json)
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "ec2.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+
+
+
+--- Step 2: Create the IAM Role:-
+
+aws iam create-role \
+  --role-name iamrole_john \
+  --assume-role-policy-document file://trust-policy.json
+
+
+
+--- Step 3: Get the Policy ARN for iampolicy_john:- (This returns the ARN (e.g., arn:aws:iam::123456789012:policy/iampolicy_john).)
+
+aws iam list-policies \
+  --query "Policies[?PolicyName=='iampolicy_john'].Arn" \
+  --output text
+
+
+
+--- Step 4: Attach the Policy to the Role:-
+
+aws iam attach-role-policy \
+  --role-name iamrole_john \
+  --policy-arn arn:aws:iam::123456789012:policy/iampolicy_john
+
+
+
+--- Step 5: Verify the Role:-
+
+aws iam list-attached-role-policies \
+  --role-name iamrole_john
