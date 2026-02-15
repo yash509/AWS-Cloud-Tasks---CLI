@@ -1,0 +1,28 @@
+--- Verify Instance Status -> Step 1
+aws ec2 describe-instance-status \
+  --instance-ids i-07e8949bcaa40f2c9 \
+  --include-all-instances
+  
+  
+  
+--- Stop EC2 Instance -> Step 2
+aws ec2 stop-instances --instance-ids i-07e8949bcaa40f2c9
+
+
+
+--- Modify EC2 Instance Type and Size -> Step 3
+aws ec2 modify-instance-attribute \
+  --instance-id i-07e8949bcaa40f2c9 \
+  --instance-type "{\"Value\": \"t2.nano\"}"
+
+
+
+--- Start EC2 Instance -> Step 4
+aws ec2 start-instances --instance-ids i-07e8949bcaa40f2c9
+
+
+
+--- Verify that the instance status -> Step 5
+aws ec2 describe-instances \
+  --instance-ids i-07e8949bcaa40f2c9 \
+  --query "Reservations[*].Instances[*].{ID:InstanceId,State:State.Name,Type:InstanceType,Name:Tags[?Key=='Name']|[0].Value}"
