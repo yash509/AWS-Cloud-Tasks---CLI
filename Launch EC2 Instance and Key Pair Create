@@ -1,0 +1,22 @@
+--- Key Pair Create
+aws ec2 create-key-pair \
+  --key-name devops-kp \
+  --key-type rsa \
+  --query 'KeyMaterial' \
+  --output text > devops-kp.pem
+
+
+
+--- EC2 Instance Create
+aws ec2 run-instances \
+  --image-id ami-0c02fb55956c7d316 \
+  --count 1 \
+  --instance-type t2.micro \
+  --key-name devops-kp \
+  --security-groups default \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=devops-ec2}]'
+
+
+
+--- Verify EC2 Instance
+aws ec2 describe-instances --filters "Name=tag:Name,Values=devops-ec2"
