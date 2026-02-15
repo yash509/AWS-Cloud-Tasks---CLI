@@ -1,0 +1,22 @@
+--- Get InstanceId -> Step 1
+aws ec2 describe-instances \
+  --region us-east-1 \
+  --filters "Name=tag:Name,Values=devops-ec2" \
+  --query "Reservations[*].Instances[*].InstanceId" \
+  --output text
+
+  
+
+--- Enable Termination Protection -> Step 2
+aws ec2 modify-instance-attribute \
+  --region us-east-1 \
+  --instance-id i-0abcd1234efgh5678 \
+  --disable-api-termination
+  
+  
+  
+--- Verify Termination Protection Enabled or not -> Step 3
+aws ec2 describe-instance-attribute \
+  --region us-east-1 \
+  --instance-id i-07b82343a0b5abeb9 \
+  --attribute disableApiTermination 
