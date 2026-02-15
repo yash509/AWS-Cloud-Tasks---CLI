@@ -1,0 +1,57 @@
+--- Step 1: Get the Instance ID:-
+
+aws ec2 describe-instances \
+  --region us-east-1 \
+  --filters "Name=tag:Name,Values=devops-ec2" \
+  --query "Reservations[*].Instances[*].InstanceId" \
+  --output text
+
+
+--- Step 2: Get the Allocation ID of the Elastic IP
+
+aws ec2 describe-addresses \
+  --region us-east-1 \
+  --filters "Name=tag:Name,Values=devops-ec2-eip" \
+  --query "Addresses[*].AllocationId" \
+  --output text
+
+
+--- Step 3: Associate the Elastic IP with the Instance
+
+aws ec2 associate-address \
+  --region us-east-1 \
+  --instance-id i-0abcd1234efgh5678 \
+  --allocation-id eipalloc-0123456789abcdef0
+
+
+--- Step 4: Verify the Association
+
+aws ec2 describe-addresses \
+  --region us-east-1 \
+  --filters "Name=allocation-id,Values=eipalloc-0123456789abcdef0"
+
+
+
+-> Sample Output:
+{
+    "Addresses": [
+        {
+            "AllocationId": "eipalloc-078f9bb8cf44b7979",
+            "AssociationId": "eipassoc-025afc8135eee7ba6",
+            "Domain": "vpc",
+            "NetworkInterfaceId": "eni-0586559677747da26",
+            "NetworkInterfaceOwnerId": "374577096375",
+            "PrivateIpAddress": "172.31.44.192",
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": "devops-ec2-eip"
+                }
+            ],
+            "PublicIpv4Pool": "amazon",
+            "NetworkBorderGroup": "us-east-1",
+            "InstanceId": "i-0daa881c83af5c607",
+            "PublicIp": "54.237.91.197"
+        }
+    ]
+}
