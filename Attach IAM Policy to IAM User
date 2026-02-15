@@ -1,0 +1,20 @@
+--- Step 1: Get the Policy ARN:- (This returns the ARN (e.g., arn:aws:iam::123456789012:policy/iampolicy_yousuf).)
+
+aws iam list-policies \
+  --query "Policies[?PolicyName=='iampolicy_yousuf'].Arn" \
+  --output text
+
+
+
+--- Step 2: Attach the Policy to the User:-
+
+aws iam attach-user-policy \
+  --user-name iamuser_yousuf \
+  --policy-arn arn:aws:iam::123456789012:policy/iampolicy_yousuf
+
+
+
+--- Step 3: Verify Attachment:-
+
+aws iam list-attached-user-policies \
+  --user-name iamuser_yousuf
