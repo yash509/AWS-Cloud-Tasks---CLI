@@ -1,0 +1,13 @@
+--- Enable Stop Protection -> Step 1
+aws ec2 modify-instance-attribute \
+  --region us-east-1 \
+  --instance-id i-0123456789abcdef0 \
+  --disable-api-stop
+  
+  
+
+--- Verify Stop Protection isn Enabled or not -> Step 2
+aws ec2 describe-instance-attribute \
+  --region us-east-1 \
+  --instance-id i-0123456789abcdef0 \
+  --attribute disableApiStop
