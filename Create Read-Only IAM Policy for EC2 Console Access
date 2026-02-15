@@ -1,0 +1,31 @@
+--- Step 1: Define the Policy Document:- Saving the File as "ec2-readonly-policy.json"
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances",
+        "ec2:DescribeImages",
+        "ec2:DescribeSnapshots"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+
+
+
+--- Step 2: Create the IAM Policy:-
+
+aws iam create-policy \
+  --policy-name iampolicy_javed \
+  --policy-document file://ec2-readonly-policy.json
+
+
+
+--- Step 3: Verify the Policy:-
+
+aws iam list-policies \
+  --query "Policies[?PolicyName=='iampolicy_javed']"
