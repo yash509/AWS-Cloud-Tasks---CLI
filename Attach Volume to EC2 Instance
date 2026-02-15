@@ -1,0 +1,37 @@
+--- Step 1: Get the Instance ID:-
+
+aws ec2 describe-instances \
+  --region us-east-1 \
+  --filters "Name=tag:Name,Values=devops-ec2" \
+  --query "Reservations[*].Instances[*].InstanceId" \
+  --output text
+
+
+
+--- Step 2: Get the Volume ID:-
+
+aws ec2 describe-volumes \
+  --region us-east-1 \
+  --filters "Name=tag:Name,Values=devops-volume" \
+  --query "Volumes[*].VolumeId" \
+  --output text
+
+
+
+--- Step 3: Attach the Volume:-
+
+aws ec2 attach-volume \
+  --region us-east-1 \
+  --volume-id vol-0123456789abcdef0 \
+  --instance-id i-0abcd1234efgh5678 \
+  --device /dev/sdb
+
+
+
+
+--- Step 4: Verify Attachment Status:-
+
+aws ec2 describe-volumes \
+  --region us-east-1 \
+  --volume-ids vol-0123456789abcdef0 \
+  --query "Volumes[*].Attachments[*].State" \
