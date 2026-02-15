@@ -1,0 +1,26 @@
+--- Step 1: Get the Instance ID:-
+
+aws ec2 describe-instances \
+  --region us-east-1 \
+  --filters "Name=tag:Name,Values=devops-ec2" \
+  --query "Reservations[*].Instances[*].InstanceId" \
+  --output text
+
+
+
+--- Step 2: Create the AMI:-
+
+aws ec2 create-image \
+  --region us-east-1 \
+  --instance-id i-0abcd1234efgh5678 \
+  --name "devops-ec2-ami" \
+  --no-reboot
+
+
+
+--- Step 3: Verify AMI Status:-
+
+aws ec2 describe-images \
+  --region us-east-1 \
+  --image-ids ami-0123456789abcdef0 \
+  --query "Images[*].State" 
