@@ -6,7 +6,7 @@ aws iam list-policies \
 
 
 
---- Step 2: Attach the Policy to the User:-
+--- Step 2: Attach the Policy to the User:- 
 
 aws iam attach-user-policy \
   --user-name iamuser_yousuf \
