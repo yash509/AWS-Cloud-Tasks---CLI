@@ -1,0 +1,67 @@
+--- Step 1: Know the VPC ID:-
+
+aws ec2 describe-vpcs \
+  --query "Vpcs[*].{VpcId:VpcId,Name:Tags[?Key=='Name']|[0].Value}" \
+  --output table
+  
+  
+
+--- Step 2: Know the Subnets ID:-
+
+aws ec2 describe-subnets \
+  --query "Subnets[*].{SubnetId:SubnetId,SubnetName:Tags[?Key=='Name']|[0].Value,VpcId:VpcId,VpcName:(VpcId)}" \
+  --output table
+  
+  
+
+--- Step 3: Security Group Create:-
+
+aws ec2 create-security-group \
+  --group-name xfusion-sg \
+  --description "Security group for xfusion-ec2" \
+  --vpc-id vpc-054457374250c00fe
+  
+Add inbound rules in SG (SSH + HTTP for app access):-
+
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-0710740404d372a18 \
+  --protocol tcp \
+  --port 22 \
+  --cidr 0.0.0.0/0
+
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-0710740404d372a18 \
+  --protocol tcp \
+  --port 80 \
+  --cidr 0.0.0.0/0
+  
+  
+
+--- Step 4: Launch EC2 Instance:-
+
+aws ec2 run-instances \
+  --image-id ami-0e2c8caa4b6378d8c \
+  --count 1 \
+  --instance-type t2.micro \
+  --key-name id_rsa \
+  --security-group-ids sg-0710740404d372a18 \
+  --subnet-id subnet-0125070517b96414f \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=datacenter-ec2}]'
+
+  
+  
+--- Step 5: Copy Public Key to EC2 Instance
+
+aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=datacenter-ec2" \
+  --query "Reservations[*].Instances[*].PublicIpAddress" \
+  --output text
+
+ssh -i temp-key.pem ubuntu@100.52.218.71 "mkdir -p /root/.ssh && echo $(cat /root/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys"
+
+
+
+---- Step 6: Step 4: Test Passwordless SSH:-
+
+ssh -i /root/.ssh/id_rsa root@X.X.X.X
+
