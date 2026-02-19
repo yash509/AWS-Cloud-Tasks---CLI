@@ -1,0 +1,65 @@
+--- Step 1: Create a Key Pair:-
+
+aws ec2 create-key-pair \
+  --key-name MyKeyPair \
+  --query 'KeyMaterial' \
+  --output text > MyKeyPair.pem
+
+chmod 400 MyKeyPair.pem
+
+
+
+--- Step 2: Create a Security Group:-
+
+aws ec2 create-security-group \
+  --group-name xfusion-sg \
+  --description "Security group for xfusion-ec2" \
+  --vpc-id vpc-0123456789abcdef0
+
+Add inbound rules in SG (SSH + HTTP for app access):-
+
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-0739333a4e12a1da0 \
+  --protocol tcp \
+  --port 22 \
+  --cidr 0.0.0.0/0
+
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-0739333a4e12a1da0 \
+  --protocol tcp \
+  --port 80 \
+  --cidr 0.0.0.0/0
+
+
+
+--- Step 3: Identify a Subnet:-
+
+aws ec2 describe-subnets \
+  --filters "Name=vpc-id,Values=vpc-006ce3d3aafa1d55d" \
+  --query "Subnets[*].SubnetId"
+
+
+
+--- Step 4: Launch EC2 Instance:-
+
+aws ec2 run-instances \
+  --image-id ami-0e2c8caa4b6378d8c \
+  --count 1 \
+  --instance-type t2.micro \
+  --key-name MyKeyPair \
+  --security-group-ids sg-0739333a4e12a1da0 \
+  --subnet-id subnet-093af31f1cf1a1803 \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=xfusion-ec2}]'
+
+
+
+--- Step 5: Allocate and Associate Elastic IP:-
+
+aws ec2 allocate-address \
+  --domain vpc \
+  --tag-specifications 'ResourceType=elastic-ip,Tags=[{Key=Name,Value=xfusion-eip}]'
+  
+aws ec2 associate-address \
+  --instance-id i-06b869980ebbf52d9 \
+  --allocation-id eipalloc-0cdf03aecfe4679d5
+
