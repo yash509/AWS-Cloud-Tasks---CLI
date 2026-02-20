@@ -1,0 +1,33 @@
+--- Step 1: Create the New Private S3 Bucket:-
+
+aws s3 mb s3://xfusion-sync-17951
+
+By default, new buckets are private. You can explicitly block public access for extra safety:
+
+aws s3api put-public-access-block \
+  --bucket xfusion-sync-17951 \
+  --public-access-block-configuration '{
+    "BlockPublicAcls": true,
+    "IgnorePublicAcls": true,
+    "BlockPublicPolicy": true,
+    "RestrictPublicBuckets": true
+  }'
+
+
+
+--- Step 2: Migrate Data from the Existing Bucket:-
+
+aws s3 sync s3://xfusion-s3-5402 s3://xfusion-sync-17951
+
+
+
+--- Step 3: Verify Data Consistency:-
+
+-> List objects in both buckets:
+
+aws s3 ls s3://xfusion-s3-5402 --recursive > source_list.txt
+aws s3 ls s3://xfusion-sync-17951 --recursive > target_list.txt
+
+-> Compare the lists:
+
+diff source_list.txt target_list.txt
