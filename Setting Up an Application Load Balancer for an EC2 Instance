@@ -1,0 +1,93 @@
+--- Step 1: Create the Security Group:-
+
+aws ec2 create-security-group \
+  --group-name devops-sg \
+  --description "Security group for ALB allowing HTTP traffic"
+  
+aws ec2 authorize-security-group-ingress \
+  --group-name devops-sg \
+  --protocol tcp \
+  --port 80 \
+  --cidr 0.0.0.0/0
+  
+aws ec2 authorize-security-group-ingress \
+  --group-id <ec2-sg-id> \
+  --protocol tcp \
+  --port 80 \
+  --source-group <above-alb-sg-id>
+
+
+--- Step 2: Know your VPC ID:-
+
+aws ec2 describe-vpcs \
+  --query "Vpcs[*].{VpcId:VpcId,Name:Tags[?Key=='Name']|[0].Value}" \
+  --output table
+
+
+
+--- Step 3: Get Instance ID:-
+
+aws ec2 describe-instances \
+  --region us-east-1 \
+  --query "Reservations[*].Instances[*].InstanceId" \
+  --output text   
+  
+  
+  
+--- Step 4: Create the Target Group:-
+
+aws elbv2 create-target-group \
+  --name devops-tg \
+  --protocol HTTP \
+  --port 80 \
+  --target-type instance \
+  --vpc-id vpc-09ab4b088a58193a7
+
+Register the EC2 instance with the target group:  
+
+aws elbv2 register-targets \
+  --target-group-arn <target-group-arn> \
+  --targets Id=<ec2-instance-id>
+  
+
+  
+--- Step 5: Know the Subnets:-
+
+aws ec2 describe-subnets \
+  --query "Subnets[*].{SubnetId:SubnetId,SubnetName:Tags[?Key=='Name']|[0].Value,VpcId:VpcId,VpcName:(VpcId)}" \
+  --output table
+  
+  
+  
+--- Step 6: Know the Subnet ID under which the EC2 Instance is:- (EC2 Subnet will be used in the Subnets for ALB Creation)
+
+aws ec2 describe-instances --instance-ids <instance ID> \
+  --query "Reservations[].Instances[].SubnetId"
+  
+  
+  
+--- Step 7: Create the Application Load Balancer:-
+
+aws elbv2 create-load-balancer \
+  --name devops-alb \
+  --subnets subnet-06b01103b318b5ede subnet-0a0fedb9785ca3cc7 \
+  --security-groups sg-078ab4a87ad629490
+  
+  
+  
+--- Step 8: Create a Listener for the ALB:-
+
+aws elbv2 create-listener \
+  --load-balancer-arn <alb-arn> \
+  --protocol HTTP \
+  --port 80 \
+  --default-actions Type=forward,TargetGroupArn=<target-group-arn>
+
+
+
+--- Step 9: Verification:-
+
+aws elbv2 describe-load-balancers --names <alb-name>
+  
+  
+
