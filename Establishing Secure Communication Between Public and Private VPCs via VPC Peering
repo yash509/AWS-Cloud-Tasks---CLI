@@ -1,0 +1,97 @@
+Step 1: Describe Instance:
+
+aws ec2 describe-instances \
+  --query "Reservations[*].Instances[*].{ID:InstanceId,State:State.Name,Type:InstanceType,Name:Tags[?Key=='Name']|[0].Value}"
+  
+
+
+Step 2: Describe VPC:-
+
+aws ec2 describe-vpcs \
+  --query "Vpcs[*].{VpcId:VpcId,Name:Tags[?Key=='Name']|[0].Value}" \
+  --output table
+  
+  
+  
+Step 3: Describe Subnets:
+
+aws ec2 describe-subnets \
+  --query "Subnets[*].{SubnetId:SubnetId,SubnetName:Tags[?Key=='Name']|[0].Value,VpcId:VpcId,VpcName:(VpcId)}" \
+  --output table
+  
+  
+  
+Step 4: Create the VPC Peering Connection:-
+
+aws ec2 create-vpc-peering-connection \
+  --vpc-id <public-vpc-id> \
+  --peer-vpc-id <private-vpc-id> \
+  --tag-specifications 'ResourceType=vpc-peering-connection,Tags=[{Key=Name,Value=datacenter-vpc-peering}]' \
+  --region us-east-1
+
+aws ec2 accept-vpc-peering-connection \
+  --vpc-peering-connection-id <peering-connection-id> \
+  --region us-east-1
+
+
+
+Step 5: Describe RT:-
+
+aws ec2 describe-route-tables \
+  --region us-east-1 \
+  --query "RouteTables[*].{RouteTableId:RouteTableId,RouteTableName:Tags[?Key=='Name']|[0].Value,VpcId:VpcId,VpcName:Vpc.Tags[?Key=='Name']|[0].Value}" \
+  --output table
+
+
+
+Step 6: Update Route Tables:-
+
+aws ec2 create-route \
+  --route-table-id <public-vpc-rtb-id> \
+  --destination-cidr-block <Private VPC CIDR> \
+  --vpc-peering-connection-id <peering-connection-id> \
+  --region us-east-1
+
+aws ec2 create-route \
+  --route-table-id <private-vpc-rtb-id> \
+  --destination-cidr-block <public-vpc-cidr> \
+  --vpc-peering-connection-id <peering-connection-id> \
+  --region us-east-1
+  
+  
+  
+Step 7: Know the SG ID of a EC2 Instance:-
+
+aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=<private EC2 Instance Name>" \
+  --region us-east-1 \
+  --query "Reservations[*].Instances[*].SecurityGroups[*].GroupId" \
+  --output text
+
+
+
+Step 8: Allow ICMP (Ping) from Public VPC CIDR:-
+
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-xxxxxxxxxxxxxxx \
+  --protocol icmp \
+  --port -1 \
+  --cidr <public VPC CIDR> \
+  --region us-east-1
+  
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-xxxxxxxxxxxxxxx \
+  --protocol tcp \
+  --port 22 \
+  --cidr <public VPC CIDR> \
+  --region us-east-1
+
+
+
+Step 9: Verification:
+
+Add your public key to the public EC2 instance’s ~/.ssh/authorized_keys.
+
+SSH into the public EC2 (datacenter-public-ec2).
+
+Ping the private EC2 (datacenter-private-ec2) using its private IP:
