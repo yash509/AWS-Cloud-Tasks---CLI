@@ -1,0 +1,31 @@
+Step 1: Take a Snapshot of the RDS Instance
+
+aws rds create-db-snapshot \
+    --db-instance-identifier xfusion-rds \
+    --db-snapshot-identifier <rds instance snapshot name>
+
+
+
+Step 2: Restore the Snapshot to a New RDS Instance
+
+aws rds restore-db-instance-from-db-snapshot \
+    --db-instance-identifier <new rds instance name> \
+    --db-snapshot-identifier <rds instance snapshot name> \
+    --db-instance-class <RDS instance size>
+
+
+
+Step 3: Verify the New RDS Instance
+
+aws rds describe-db-instances \
+    --db-instance-identifier <new rds instance name> \
+    --query "DBInstances[0].DBInstanceStatus"
+
+
+
+Step 4: Describe all the RDS Instances available in a Region
+
+aws rds describe-db-instances \
+    --region us-east-1 \
+    --query "DBInstances[*].[DBInstanceIdentifier,DBInstanceStatus]" \
+    --output table
