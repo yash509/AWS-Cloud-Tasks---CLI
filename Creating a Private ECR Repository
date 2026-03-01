@@ -1,0 +1,46 @@
+Step 1: Create ECR Repository:-
+
+aws ecr create-repository \
+  --repository-name <repo name> \
+  --region us-east-1
+
+
+
+Step 2: Verify ECR Repository:-
+
+aws ecr describe-repositories \
+  --repository-names nautilus-ecr \
+  --region us-east-1
+
+
+
+Step 3: Verify Docker Image Build:-
+
+docker build -t <image name>:<image tag> .
+
+
+
+Step 4: Authenticate Docker to ECR:-
+
+aws ecr get-login-password --region us-east-1 | \
+docker login --username AWS --password-stdin <account_id>.dkr.ecr.us-east-1.amazonaws.com
+
+
+
+Step 5: Tag and Push Image:-
+
+docker tag <image name>:<image tag> <account_id>.dkr.ecr.us-east-1.amazonaws.com/<image name>:<image tag>
+
+docker push <account_id>.dkr.ecr.us-east-1.amazonaws.com/<image name>:<image tag>
+
+
+
+Step 6: Verify Image in ECR:-
+
+aws ecr list-images \
+  --repository-name <repo name> \
+  --region us-east-1
+
+aws ecr describe-images \
+  --repository-name <repo name> \
+  --region us-east-1
