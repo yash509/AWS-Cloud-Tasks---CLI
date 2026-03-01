@@ -1,0 +1,104 @@
+Step 1: Know the VPC
+
+aws ec2 describe-vpcs \
+  --query "Vpcs[*].{VpcId:VpcId,Name:Tags[?Key=='Name']|[0].Value}" \
+  --output table
+  
+  
+  
+Step 2: Know the Subnets
+
+aws ec2 describe-subnets \
+  --query "Subnets[*].{SubnetId:SubnetId,SubnetName:Tags[?Key=='Name']|[0].Value,VpcId:VpcId,VpcName:(VpcId)}" \
+  --output table
+  
+  
+  
+Step 3: Private VPC Creation
+
+aws ec2 create-vpc \
+    --cidr-block 10.0.0.0/16 \
+    --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=devops-private-vpc}]'
+
+
+
+Step 4: Create Private Subnets
+
+# Subnet in AZ1
+aws ec2 create-subnet \
+    --vpc-id <VpcId> \
+    --cidr-block 10.0.1.0/24 \
+    --availability-zone us-east-1a \
+    --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=devops-private-subnet-a}]'
+
+# Subnet in AZ2
+aws ec2 create-subnet \
+    --vpc-id <VpcId> \
+    --cidr-block 10.0.2.0/24 \
+    --availability-zone us-east-1b \
+    --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=devops-private-subnet-b}]'
+
+
+
+Step 5: Create a DB Subnet Group
+
+aws rds create-db-subnet-group \
+    --db-subnet-group-name devops-private-subnet-group \
+    --db-subnet-group-description "Private subnet group for devops RDS" \
+    --subnet-ids <SubnetId1> <SubnetId2> \
+    --tags Key=Name,Value=devops-private-subnet-group
+
+
+
+Step 6: Create a Security Group (Private Access Only)
+
+aws ec2 create-security-group \
+    --group-name devops-rds-sg \
+    --description "Security group for private RDS" \
+    --vpc-id <VpcId>
+
+aws ec2 authorize-security-group-ingress \
+    --group-id <SecurityGroupId> \
+    --protocol tcp \
+    --port 3306 \
+    --cidr 10.0.0.0/16
+
+
+
+Step 7: Describe the list of Supported MySQL Versions for the RDS Instance in Your Region	
+
+aws rds describe-db-engine-versions \
+    --engine mysql \
+    --query "DBEngineVersions[].EngineVersion"
+
+	
+	
+Step 8: Provision the RDS Instance
+
+aws rds create-db-instance \
+    --db-instance-identifier <rds instance name> \
+    --db-instance-class <rds instance size> \
+    --engine mysql \
+    --engine-version <version> \
+    --allocated-storage 20 \
+    --max-allocated-storage <threshold value> \
+    --storage-type gp2 \
+    --master-username admin \
+    --master-user-password 'YourSecurePassword123!' \
+    --no-publicly-accessible \
+    --vpc-security-group-ids <SecurityGroupId> \
+    --db-subnet-group-name devops-private-subnet-group
+
+
+
+Step 9: Wait Until RDS is Available
+
+aws rds wait db-instance-available \
+    --db-instance-identifier <rds instance name>
+
+
+
+Setp 10: Verify the RDS Instance
+
+aws rds describe-db-instances \
+    --db-instance-identifier <rds instance name>
