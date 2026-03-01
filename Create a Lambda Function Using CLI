@@ -1,0 +1,51 @@
+Step 1: Create the required Python Script (if Lambda Function is of Python)
+
+import json
+
+def lambda_handler(event, context):
+    return {
+        'statusCode': 200,
+        'body': 'Welcome to KKE AWS Labs!'
+    }
+
+
+
+Step 2: Zip the Script
+
+zip <zip file name>.zip <python script name>.py
+
+
+
+Step 3: Know the AWS Account ID
+
+aws sts get-caller-identity \
+    --query "Account" \
+    --output text
+
+
+
+Step 3: Create the Lambda Function (Use the zipped file to create the Lambda function named datacenter-lambda-cli with Python runtime and the IAM role lambda_execution_role)
+
+aws lambda create-function \
+    --function-name <Lambda Function Name> \
+    --runtime <specify runtime such as python, nodejs, etc> \
+    --role arn:aws:iam::<your-account-id>:role/<iam-lambda_execution_role> \
+    --handler lambda_function.lambda_handler \
+    --zip-file fileb://<zip file name>.zip
+
+
+
+Step 4: Verify the Function:
+
+aws lambda get-function \
+    --function-name datacenter-lambda-cli
+
+
+
+Step 5: Test the Lambda Function:
+
+aws lambda invoke \
+    --function-name <Lambda-function-name>  \
+    --payload '{}' \
+    output.json
+
