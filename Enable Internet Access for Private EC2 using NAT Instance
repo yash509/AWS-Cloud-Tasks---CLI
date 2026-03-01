@@ -1,0 +1,96 @@
+Step 1: 
+
+aws ec2 describe-vpcs \
+  --query "Vpcs[*].{VpcId:VpcId,Name:Tags[?Key=='Name']|[0].Value}" \
+  --output table
+  
+  
+
+Step 2: 
+
+aws ec2 describe-subnets \
+  --query "Subnets[*].{SubnetId:SubnetId,SubnetName:Tags[?Key=='Name']|[0].Value,VpcId:VpcId,VpcName:(VpcId)}" \
+  --output table
+  
+  
+  
+Step 3: 
+
+aws ec2 create-subnet \
+  --vpc-id <nautilus-priv-vpc-id> \
+  --cidr-block 10.1.2.0/24 \
+  --availability-zone us-east-1a \
+  --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=nautilus-pub-subnet}]' \
+  --region us-east-1
+
+
+
+Step 4: Know the Amazon Linux 2 AMI ID:-
+
+aws ec2 describe-images \
+  --owners 137112412989 \
+  --filters "Name=name,Values=amzn2-ami-hvm-2.0.*-x86_64-gp2" \
+  --query 'Images[*].[ImageId,Name]' \
+  --region us-east-1 \
+  --output table
+
+
+
+Step 5: 
+
+aws ec2 create-key-pair \
+  --key-name devops-kp \
+  --key-type rsa \
+  --query 'KeyMaterial' \
+  --output text > devops-kp.pem  
+
+
+Step 6:
+
+aws ec2 describe-security-groups \
+  --region us-east-1 \
+  --query "SecurityGroups[*].{GroupId:GroupId,GroupName:GroupName,Name:Tags[?Key=='Name']|[0].Value}" \
+  --output table
+  
+  
+  
+Step 7: 
+
+aws ec2 authorize-security-group-ingress \
+  --group-id <group id> \
+  --protocol tcp \
+  --port 22 \
+  --cidr 0.0.0.0/0
+
+  
+  
+Step 8: 
+
+aws ec2 run-instances \
+  --image-id <amazon-linux-2-ami-id> \
+  --count 1 \
+  --instance-type t2.micro \
+  --key-name devops-kp \
+  --subnet-id <nautilus-pub-subnet-id> \
+  --associate-public-ip-address \
+  --security-group-ids <nat-sg-id> \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=nautilus-nat-instance}]' \
+  --region us-east-1
+
+
+
+Step 9:
+
+aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=datacenter-ec2" \
+  --query "Reservations[*].Instances[*].PublicIpAddress" \
+  --output text
+
+
+
+Step 10: 
+
+aws ec2 modify-instance-attribute \
+  --instance-id <nat-instance-id> \
+  --no-source-dest-check \
+  --region us-east-1
