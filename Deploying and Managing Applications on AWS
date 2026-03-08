@@ -1,0 +1,86 @@
+Step 1: Create the RDS Instance
+
+aws rds create-db-instance \
+    --db-instance-identifier <RDS Instance Identifier Name> \
+    --db-instance-class <type or size of Instance> \
+    --engine <DB Type e.g. mysql> \
+    --engine-version <DB Version e.g. mysql having the version 8.4.5> \
+    --master-username <DB User Name> \
+    --master-user-password 'YourDBSecurePasswordHere' \
+    --allocated-storage <storage type e.g. 5GiB> \
+    --storage-type <RDS Storage Type e.g. gp2> \
+    --db-name <DB Name> \
+    --no-publicly-accessible
+
+
+
+Step 2: Wait for the RDS Instance for its Available State
+
+aws rds wait db-instance-available --db-instance-identifier <RDS Instance Identifier Name>
+
+
+
+Step 3: Configure Security Groups:
+
+# Get EC2 security group
+aws ec2 describe-instances \
+    --filters "Name=tag:Name,Values=nautilus-ec2" \
+    --query "Reservations[*].Instances[*].SecurityGroups[*].GroupId" \
+    --output text
+	
+aws ec2 authorize-security-group-ingress \
+    --group-id <EC2-SG-ID> \
+    --protocol tcp \
+    --port 80 \
+    --cidr 0.0.0.0/0
+
+
+# Get RDS security group
+aws rds describe-db-instances \
+    --db-instance-identifier nautilus-rds \
+    --query "DBInstances[*].VpcSecurityGroups[*].VpcSecurityGroupId" \
+    --output text
+
+aws ec2 authorize-security-group-ingress \
+    --group-id <RDS-SG-ID> \
+    --protocol tcp \
+    --port 3306 \
+    --source-group <EC2-SG-ID>
+
+
+
+Step 4: Setup SSH Key for Password-less Access to EC2 Instance
+
+# Generate SSH key if not exists
+[ -f /root/.ssh/id_rsa ] || ssh-keygen -t rsa -b 4096 -f /root/.ssh/id_rsa -N ""
+
+# Copy public key to EC2
+EC2_PUBLIC_IP=$(aws ec2 describe-instances \
+    --filters "Name=tag:Name,Values=nautilus-ec2" \
+    --query "Reservations[*].Instances[*].PublicIpAddress" \
+    --output text)
+
+ssh-copy-id -i /root/.ssh/id_rsa.pub root@$EC2_PUBLIC_IP
+
+
+
+Step 5: Copy index.php to EC2 and Update for RDS Connection
+
+scp /root/index.php root@$EC2_PUBLIC_IP:/var/www/html/
+
+Edit /var/www/html/index.php on EC2 to connect to RDS:
+<?php
+$servername = "nautilus-rds.<region>.rds.amazonaws.com";
+$username = "<DB User name>";
+$password = "YourSecurePasswordHere";
+$dbname = "<DB Name>";
+
+// Create connection
+$conn = new mysqli($servername, $username, $password, $dbname);
+
+// Check connection
+if ($conn->connect_error) {
+  die("Connection failed: " . $conn->connect_error);
+}
+echo "Connected successfully";
+?>
