@@ -1,0 +1,130 @@
+Step 1: Create a Security Group
+
+aws ec2 create-security-group \
+    --group-name <SG Name> \
+    --description "Security group for DevOps EC2 instance"
+
+aws ec2 authorize-security-group-ingress \
+    --group-name <SG Name> \
+    --protocol tcp \
+    --port 80 \
+    --cidr 0.0.0.0/0
+
+
+
+Step 2: Find an active Ubuntu AMI ID:
+
+aws ec2 describe-images \
+    --owners 099720109477 \
+    --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"
+
+
+
+Step 3: Create a Key pair:
+
+aws ec2 create-key-pair \
+  --key-name <KeyPair Name> \
+  --key-type rsa \
+  --query 'KeyMaterial' \
+  --output text > <KeyPair Name>.pem
+  
+  
+ 
+Step 4: Launch an EC2 Instance (with default security group):
+
+aws ec2 run-instances \
+    --image-id <AMI_ID> \
+    --count 1 \
+    --instance-type t2.micro \
+    --key-name <YourKeyPair> \
+    --security-groups <SG Name> \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=<EC2 Instance Name>}]' \
+    --user-data '#!/bin/bash
+                 apt-get update -y
+                 apt-get install -y nginx
+                 systemctl start nginx
+                 systemctl enable nginx'
+
+
+
+Step 5: Describe the Existing VPCs
+
+aws ec2 describe-vpcs \
+  --query "Vpcs[*].{VpcId:VpcId,Name:Tags[?Key=='Name']|[0].Value}" \
+  --output table
+
+
+
+Step 6: Create Target Group
+
+aws elbv2 create-target-group \
+    --name <target-group name> \
+    --protocol HTTP \
+    --port 80 \
+    --vpc-id <YourVPC_ID> \
+    --target-type instance
+
+
+
+Step 7: Describe the exiting EC2 instances with their InstanceID
+
+aws ec2 describe-instances \
+  --query "Reservations[*].Instances[*].{ID:InstanceId,State:State.Name,Type:InstanceType,Name:Tags[?Key=='Name']|[0].Value}"
+
+
+Step 8: Register an EC2 Instance with a Target Group
+
+aws elbv2 register-targets \
+    --target-group-arn <TargetGroupARN> \
+    --targets Id=<EC2 InstanceID>
+	
+	
+
+Step 9: Describe Subnets:
+
+aws ec2 describe-subnets \
+  --query "Subnets[*].{SubnetId:SubnetId,SubnetName:Tags[?Key=='Name']|[0].Value,VpcId:VpcId,VpcName:(VpcId)}" \
+  --output table
+  
+
+
+Step 10: Describe the Security Group ID:
+
+aws ec2 describe-security-groups \
+	--group-name  <SG Name>
+
+
+
+Step 10: Create Application Load Balancer
+
+aws elbv2 create-load-balancer \
+    --name <ALB Name> \
+    --subnets <Subnet1_ID> <Subnet2_ID> \
+    --security-groups <DefaultSecurityGroupID>
+
+
+
+Step 11: Create Listener for ALB
+
+aws elbv2 create-listener \
+    --load-balancer-arn <ALB_ARN> \
+    --protocol HTTP \
+    --port 80 \
+    --default-actions Type=forward,TargetGroupArn=<TargetGroupARN>
+
+
+
+Step 12: Verify Setup DNS Name of ALB and Status of ALB
+
+aws elbv2 describe-load-balancers \
+    --names <ALB Name> \
+    --query "LoadBalancers[0].DNSName" \
+    --output text
+	
+aws elbv2 describe-load-balancers \
+    --names <ALB Name> \
+    --query "LoadBalancers[0].State.Code" \
+    --output text
+
+
+
