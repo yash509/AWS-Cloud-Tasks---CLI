@@ -1,0 +1,113 @@
+Step 1: Setup SSH Keys to interact with S3 from EC2 remotely
+
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa
+ssh-copy-id -i ~/.ssh/id_rsa.pub root@<EC2-Public-IP>
+
+
+
+Step 2: Create a Private S3 Bucket
+
+aws s3api create-bucket --bucket <bucket-name> --region <region-name>
+
+
+
+Step 3: Blocking all Public Accesses to the S3 Bucket
+
+aws s3api put-bucket-acl --bucket <bucket-name> --acl private
+
+
+
+Step 4: Making the S3 Bucket Private
+
+aws s3api put-public-access-block \
+  --bucket <bucket-name>\
+  --public-access-block-configuration '{
+    "BlockPublicAcls": true,
+    "IgnorePublicAcls": true,
+    "BlockPublicPolicy": true,
+    "RestrictPublicBuckets": true
+  }'
+  
+  
+  
+Step 5: Verify S3 Bucket Ownership (Response:- "BucketOwnerEnforced", ACLs are disabled)
+
+aws s3api get-bucket-ownership-controls --bucket <bucket-name>
+
+
+
+Step 6: Create IAM Policy and Role Creation
+
+Create IAM Policy and save the following JSON as s3-policy.json:
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::devops-s3-453191208900/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::devops-s3-453191208900"
+    }
+  ]
+}
+
+aws iam create-policy --policy-name devops-s3-policy --policy-document file://s3-policy.json
+
+
+Create IAM Role and save the following json as trust-policy.json:
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "ec2.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+
+aws iam create-role --role-name <role-name> --assume-role-policy-document file://trust-policy.json
+
+
+
+Step 7: Attach IAM Policy to IAM Role
+
+aws iam attach-role-policy \
+  --role-name devops-role \
+  --policy-arn arn:aws:iam::<account-id>:policy/devops-s3-policy
+  
+  
+
+Step 8: Create Instance Profile
+
+aws iam create-instance-profile --instance-profile-name <profile-name>
+aws iam add-role-to-instance-profile --instance-profile-name <profile-name> --role-name <role-name>
+
+
+
+Step 9: Attach IAM Role to EC2 Instance
+
+aws ec2 associate-iam-instance-profile \
+  --instance-id <devops-ec2-instance-id> \
+  --iam-instance-profile Name=<profile-name>
+  
+  
+
+Step 10: Testing/Verification
+
+ssh -i ~/.ssh/id_rsa <user-name>@<EC2-Public-IP>
+
+aws s3 cp <path-for-file-to-copy> s3://<bucket-name>/
+
+aws s3 ls s3://<bucket-name>/
