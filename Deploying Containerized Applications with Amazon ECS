@@ -1,0 +1,152 @@
+Step 1: Create the ECR Repo
+
+aws ecr create-repository \
+    --repository-name <repo-name> \
+    --region <region>
+	
+	
+	
+Step 2: Authenticate Docker with ECR
+
+aws ecr get-login-password --region <region> \
+    | docker login --username AWS --password-stdin <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+
+
+
+Step 3: Build and Push Docker Image
+
+docker build -t nautilus-ecr:latest .
+docker tag <repo-name>:latest <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/<image-name>:latest
+docker push <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/<image-name>:latest
+
+
+
+Step 4: Create ECS Cluster (Fargate)
+
+aws ecs create-cluster \
+    --cluster-name <ecs-cluster-name> \
+    --region <region>
+
+
+
+Step 5: Create the ECS Task Execution Role
+
+aws iam create-role \
+    --role-name ecsTaskExecutionRole \
+    --assume-role-policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "Service": "ecs-tasks.amazonaws.com"
+                },
+                "Action": "sts:AssumeRole"
+            }
+        ]
+    }'	
+
+
+
+Step 6: Attach IAM Role to IAM Policy
+
+aws iam attach-role-policy \
+    --role-name ecsTaskExecutionRole \
+    --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+
+
+Step 7: Verify the Role Exists and Is Correct
+
+aws iam get-role --role-name ecsTaskExecutionRole
+	
+	
+
+Step 8: Register ECS Cluster Task Definition
+
+aws ecs register-task-definition \
+    --family <task-definition-name> \
+    --network-mode awsvpc \
+    --requires-compatibilities <ecs-cluster-launch-type-name eg:- FARGATE> \
+    --cpu 256 \
+    --memory 512 \
+    --execution-role-arn arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskExecutionRole \
+    --container-definitions '[
+        {
+            "name": "<container-name>",
+            "image": "<AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/<image-name>:latest",
+            "essential": true,
+            "portMappings": [
+                {
+                    "containerPort": 80,
+                    "hostPort": 80,
+                    "protocol": "tcp"
+                }
+            ]
+        }
+    ]'
+	
+
+
+Step 9: Describe Subnets
+
+aws ec2 describe-subnets \
+  --query "Subnets[*].{SubnetId:SubnetId,SubnetName:Tags[?Key=='Name']|[0].Value,VpcId:VpcId,VpcName:(VpcId)}" \
+  --output table
+
+
+
+Step 10: Create a New Security Group for ECS and create the Ingress Rule
+
+aws ec2 create-security-group \
+  --group-name <Security-group-name> \
+  --description "Security group for xfusion-ec2" \
+  --vpc-id <vpc-id> 
+  
+aws ec2 authorize-security-group-ingress \
+  --group-id <sg-id> \
+  --protocol tcp \
+  --port 80 \
+  --cidr 0.0.0.0/0
+
+
+
+Step 11: Describe Security Groups
+
+aws ec2 describe-security-groups
+
+
+
+Step 12: Create ECS Service to deploy the application and run atleast one task (allow all Subnets)
+
+aws ecs create-service \
+    --cluster <cluster-name> \
+    --service-name <service-name> \
+    --task-definition <task-definition-name> \
+    --desired-count 1 \
+    --launch-type <ecs-cluster-launch-type-name e.g.:- FARGATE> \
+    --network-configuration '{
+        "awsvpcConfiguration": {
+            "subnets": ["subnet-xxxxxx"],
+            "securityGroups": ["sg-xxxxxx"],
+            "assignPublicIp": "ENABLED"
+        }
+    }'
+
+
+
+Step 13: Check if ECS Tasks Run
+
+aws ecs list-tasks \
+    --cluster <cluster-name> \
+    --service-name <service-name> \
+    --region <region>
+	
+	
+Step 14: Verify the last Status of Service (Look for "lastStatus": "RUNNING" — that confirms the service is running at least one task.)
+
+aws ecs describe-tasks \
+    --cluster <cluster-name> \
+    --tasks <TASK_ARN> \
+    --region <region>
+
