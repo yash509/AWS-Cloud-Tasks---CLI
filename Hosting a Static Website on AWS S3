@@ -1,0 +1,50 @@
+Step 1: Create the S3 bucket
+
+aws s3api create-bucket --bucket <bucket-name> --region <region-name>
+
+
+
+Step 2: Enable static website hosting
+
+aws s3 website s3://<bucket-name>/ --index-document <file-name>
+
+
+
+Step 3: Configure bucket policy for public access
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PublicReadGetObject",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::xfusion-web-30699/*"
+    }
+  ]
+}
+
+
+
+Step 4: Disable Block Public Access on the bucket
+
+aws s3api delete-public-access-block --bucket <bucket-name>
+
+
+
+Step 5: Apply the policy
+
+aws s3api put-bucket-policy --bucket <bucket-name> --policy file://<policy-name>.json
+
+
+
+Step 6: Upload the file in S3 for hosting
+
+aws s3 cp /root/<file-name> s3://<bucket-name>/
+
+
+
+Step 7: Verify website URL
+
+http://<bucket-name>.s3-website-<region>.amazonaws.com
