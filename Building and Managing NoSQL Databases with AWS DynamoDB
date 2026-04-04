@@ -1,0 +1,66 @@
+Ques:-
+
+The Nautilus DevOps team is developing a simple 'To-Do' application using DynamoDB to store and manage tasks efficiently. The team needs to create a DynamoDB table to hold tasks, each identified by a unique task ID. Each task will have a description and a status, which indicates the progress of the task (e.g., 'completed' or 'in-progress').
+
+Your task is to:
+
+Create a DynamoDB table named xfusion-tasks with a primary key called taskId (string).
+Insert the following tasks into the table:
+Task 1: taskId: '1', description: 'Learn DynamoDB', status: 'completed'
+Task 2: taskId: '2', description: 'Build To-Do App', status: 'in-progress'
+Verify that Task 1 has a status of 'completed' and Task 2 has a status of 'in-progress'.
+
+Ensure the DynamoDB table is created successfully and that both tasks are inserted correctly with the appropriate statuses.
+
+
+
+
+Soln:-
+
+Step 1:- Create the DynamoDB table
+
+aws dynamodb create-table \
+    --table-name <table-name> \
+    --attribute-definitions AttributeName=<primary-key>,AttributeType=S \
+    --key-schema AttributeName=<primary-key>,KeyType=HASH \
+    --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+
+
+
+Step 2:- Insert Task 1
+
+aws dynamodb put-item \
+    --table-name <table-name> \
+    --item '{
+        "taskId": {"S": "1"},
+        "description": {"S": "Learn DynamoDB"},
+        "status": {"S": "completed"}
+    }'
+
+
+
+Step 3:- Insert Task 2
+
+aws dynamodb put-item \
+    --table-name <table-name> \
+    --item '{
+        "taskId": {"S": "2"},
+        "description": {"S": "Build To-Do App"},
+        "status": {"S": "in-progress"}
+    }'
+
+
+
+Step 4:- Verify Task 1
+
+aws dynamodb get-item \
+    --table-name <table-name> \
+    --key '{"taskId": {"S": "1"}}'
+
+
+
+Step 5:- Verify Task 2
+
+aws dynamodb get-item \
+    --table-name <table-name> \
+    --key '{"taskId": {"S": "2"}}'
