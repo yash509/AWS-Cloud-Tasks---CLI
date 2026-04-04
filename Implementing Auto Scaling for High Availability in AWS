@@ -1,0 +1,185 @@
+Ques:-
+
+The DevOps team is tasked with setting up a highly available web application using AWS. To achieve this, they plan to use an Auto Scaling Group (ASG) to ensure that the required number of EC2 instances are always running, and an Application Load Balancer (ALB) to distribute traffic across these instances. The goal of this task is to set up an ASG that automatically scales EC2 instances based on CPU utilization, and an ALB that directs incoming traffic to the instances. The EC2 instances should have Nginx installed and running to serve web traffic.
+
+1. Create an EC2 launch template named devops-launch-template that specifies the configuration for the EC2 instances, including the Amazon Linux 2 AMI, t2.micro instance type, and a security group that allows HTTP traffic on port 80.
+2. Add a User Data script to the launch template to install Nginx on the EC2 instances when they are launched. The script should install Nginx, start the Nginx service, and enable it to start on boot.
+3. Create an Auto Scaling Group named devops-asg that uses the launch template and ensures a minimum of 1 instance, desired capacity is 1 instance and a maximum of 2 instances are running based on CPU utilization. Set the target CPU utilization to 50%.
+4. Create a target group named devops-tg, an Application Load Balancer named devops-alb and configure it to listen on port 80. Ensure the ALB is associated with the Auto Scaling Group and distributes traffic across the instances.
+5. Configure health checks on the ALB to ensure it routes traffic only to healthy instances.
+6. Verify that the ALB's DNS name is accessible and that it displays the default Nginx page served by the EC2 instances.
+
+
+
+
+Soln:-
+
+Step 1:- Create a Security Group for HTTP traffic
+
+aws ec2 create-security-group \
+    --group-name <sg-name> \
+    --description "Security group for DevOps ASG allowing HTTP traffic"
+
+# Allow inbound HTTP traffic on port 80
+aws ec2 authorize-security-group-ingress \
+    --group-name <sg-name> \
+    --protocol tcp \
+    --port 80 \
+    --cidr 0.0.0.0/0
+
+
+
+Step 2:- Create Launch Template with User Data to install Nginx
+
+vi userdata.sh
+
+#!/bin/bash
+yum update -y
+amazon-linux-extras install nginx1 -y
+systemctl start nginx
+systemctl enable nginx
+
+
+aws ec2 create-launch-template \
+    --launch-template-name <launch-template-name> \
+    --version-description "v1" \
+    --launch-template-data "{
+        \"ImageId\": \"<ami-id>\",
+        \"InstanceType\": \"<instance-size>\",
+        \"SecurityGroups\": [\"<sg-name>\"],
+        \"UserData\": \"$USERDATA\"
+    }"
+
+
+
+Step 3:- Know your VPC
+
+aws ec2 describe-vpcs \
+    --query "Vpcs[*].{ID:VpcId,Name:Tags[?Key=='Name']|[0].Value}" \
+    --output table
+	
+	
+
+Step 4:- Create Target Group
+
+aws elbv2 create-target-group \
+    --name <tg-name> \
+    --protocol HTTP \
+    --port 80 \
+    --vpc-id <YOUR_VPC_ID> \
+    --target-type instance \
+    --health-check-protocol HTTP \
+    --health-check-port 80 \
+    --health-check-path /
+
+
+
+Step 5:- Know your Subnets
+
+ aws ec2 describe-subnets \
+  --filters "Name=vpc-id,Values=$(aws ec2 describe-vpcs --filters Name=isDefault,Values=true --query 'Vpcs[0].VpcId' --output text)" \
+  --query 'Subnets[*].[SubnetId,AvailabilityZone]' \
+  --output table	
+  
+
+
+Step 6:- Create Application Load Balancer
+
+aws elbv2 create-load-balancer \
+    --name <alb-name> \
+    --subnets <SUBNET_ID_1> <SUBNET_ID_2> \
+    --security-groups <SECURITY_GROUP_ID> \
+    --scheme internet-facing \
+    --type application
+	
+
+
+Step 7:- Create Listener for ALB
+
+aws elbv2 create-listener \
+    --load-balancer-arn <ALB_ARN> \
+    --protocol HTTP \
+    --port 80 \
+    --default-actions Type=forward,TargetGroupArn=<TARGET_GROUP_ARN>
+
+
+
+Step8:- Create Auto Scaling Group
+
+aws autoscaling create-auto-scaling-group \
+    --auto-scaling-group-name <asg-name> \
+    --launch-template LaunchTemplateName=devops-launch-template,Version=1 \
+    --min-size 1 \
+    --desired-capacity 1 \
+    --max-size 2 \
+    --vpc-zone-identifier "<SUBNET_ID_1>,<SUBNET_ID_2>" \
+    --target-group-arns <TARGET_GROUP_ARN>
+  
+(Create a new Launch Template Version):- (if required)
+
+aws ec2 create-launch-template-version \
+  --launch-template-name <launch-template-name> \
+  --version-description "v2" \
+  --launch-template-data "{
+      \"ImageId\": \"<ami-id>\",
+      \"InstanceType\": \"t2.micro\",
+      \"NetworkInterfaces\": [
+          {
+              \"DeviceIndex\": 0,
+              \"AssociatePublicIpAddress\": true,
+              \"Groups\": [\"<sg-id>\"]
+          }
+      ],
+      \"UserData\": \"$USERDATA\"
+  }"
+  
+(Modify Launch Template with the new version):- (if required)
+
+aws ec2 modify-launch-template \
+    --launch-template-name <launch-template-name> \
+    --default-version 2
+
+	
+
+Step 9:- Describe Auto Scaling Group
+
+aws autoscaling describe-auto-scaling-groups \
+    --auto-scaling-group-names <asg-name> \
+    --query "AutoScalingGroups[0].Instances"	
+	
+	
+
+Step 10:- Attach Scaling Policy (CPU Utilization 50%)
+
+aws autoscaling put-scaling-policy \
+    --auto-scaling-group-name <asg-name> \
+    --policy-name cpu50policy \
+    --policy-type TargetTrackingScaling \
+    --target-tracking-configuration "{
+        \"PredefinedMetricSpecification\": {
+            \"PredefinedMetricType\": \"ASGAverageCPUUtilization\"
+        },
+        \"TargetValue\": 50.0
+    }"
+
+
+
+Step 11:- Describe Target Group Health
+
+aws elbv2 describe-target-health \
+    --target-group-arn <tg-arn>	
+
+
+
+Step 12:- Verify ALB DNS Name
+
+aws elbv2 describe-load-balancers \
+    --names <alb-name> \
+    --query 'LoadBalancers[0].DNSName' \
+    --output text	
+	
+	
+	
+Step 13:- Verification (it should display nginx welcome page)
+
+curl http://<alb-DNS-Name>
