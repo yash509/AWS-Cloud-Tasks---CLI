@@ -1,0 +1,154 @@
+Ques:-
+
+The Nautilus Development Team recently deployed a new web application hosted on an EC2 instance within a public VPC named devops-vpc. The application, running on an Nginx server, should be accessible from the internet on port 80. Despite configuring the security group devops-sg to allow traffic on port 80 and verifying the EC2 instance settings, the application remains inaccessible from the internet. The team suspects that the issue might be related to the VPC configuration, as all other components appear to be set up correctly. The DevOps team has been asked to troubleshoot and resolve the issue to ensure the application is accessible to external users.
+
+As a member of the Nautilus DevOps Team, your task is to perform the following:
+
+1. Verify VPC Configuration: Ensure that the VPC devops-vpc is properly configured to allow internet access.
+
+2. Ensure Accessibility: Make sure the EC2 instance devops-ec2 running the Nginx server is accessible from the internet on port 80.
+
+
+
+
+Soln:-
+
+Step 1: Describe the VPC
+
+aws ec2 describe-vpcs \
+  --query "Vpcs[*].{ID:VpcId,CIDR:CidrBlock,Name:Tags[?Key=='Name']|[0].Value}" \
+  --output table
+
+
+
+Step 2: Verify VPC has an Internet Gateway
+
+aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=<vpc-id>"
+
+
+
+Step 3: Verify the Internet Gateway
+
+aws ec2 describe-internet-gateways --internet-gateway-ids <internet-gateway-id>
+
+
+
+Step 4: Attach the Internet Gateway to your VPC
+
+aws ec2 attach-internet-gateway \
+  --internet-gateway-id <internet-gateway-id> \
+  --vpc-id <vpc-id>
+
+
+
+Step 5: Repair the Route Table so the default route points to the IGW
+
+aws ec2 replace-route \
+  --route-table-id <route-table-id> \
+  --destination-cidr-block 0.0.0.0/0 \
+  --gateway-id <internet-gateway-id>
+
+
+
+Step 6: Verify Route Table has a default route to the Internet Gateway
+
+aws ec2 describe-route-tables --filters "Name=vpc-id,Values=<vpc-id>"
+
+
+
+Step 7: Verify EC2 Instance Public IP
+
+aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=devops-ec2" \
+  --query "Reservations[*].Instances[*].PublicIpAddress" \
+  --output text
+
+
+
+Step 8: Generate EIP:
+
+aws ec2 allocate-address --domain vpc
+
+
+
+Step 9: Attach EIP to EC2 instance
+
+aws ec2 associate-address --instance-id <instance-id> --allocation-id <eipalloc-id>
+
+
+
+Step 10: Get all the Secuity Groups in a VPC
+
+aws ec2 describe-security-groups \
+  --filters "Name=vpc-id,Values=<vpc-id>" \
+  --query "SecurityGroups[*].{ID:GroupId,Name:GroupName}" \
+  --output table
+  
+
+
+Step 11: Describe a Security Group for ports verification if allow or not
+
+aws ec2 describe-security-groups --group-ids <sg-id>
+
+if port 80 is not allowed. Then use the below command:
+aws ec2 authorize-security-group-ingress \
+  --group-id <sg-id> \
+  --protocol tcp \
+  --port 80 \
+  --cidr 0.0.0.0/0
+
+
+
+Step 12: Describe Public IP of the Ec2 Instance
+
+aws ec2 describe-instances --filters "Name=tag:Name,Values=devops-ec2" --query "Reservations[*].Instances[*].PublicIpAddress" --output text
+
+
+
+Step 13: Test (it should visible the nginx welcome page)
+
+curl -v http://<public-ip-of-Ec2>
+
+Output:-
+*   Trying 34.199.226.10:80...
+* Connected to 34.199.226.10 (34.199.226.10) port 80 (#0)
+> GET / HTTP/1.1
+> Host: 34.199.226.10
+> User-Agent: curl/7.74.0
+> Accept: */*
+> 
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 200 OK
+< Server: nginx/1.24.0
+< Date: Sat, 04 Apr 2026 04:02:50 GMT
+< Content-Type: text/html
+< Content-Length: 615
+< Last-Modified: Fri, 13 Oct 2023 13:33:26 GMT
+< Connection: keep-alive
+< ETag: "65294726-267"
+< Accept-Ranges: bytes
+< 
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+html { color-scheme: light dark; }
+body { width: 35em; margin: 0 auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+
+<p>For online documentation and support please refer to
+<a href="http://nginx.org/">nginx.org</a>.<br/>
+Commercial support is available at
+<a href="http://nginx.com/">nginx.com</a>.</p>
+
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+* Connection #0 to host 34.199.226.10 left intact
