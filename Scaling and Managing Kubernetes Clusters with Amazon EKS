@@ -1,0 +1,71 @@
+Ques:-
+
+The Nautilus DevOps team has been tasked with preparing the infrastructure for a new Kubernetes-based application that will be deployed using Amazon EKS. The team is in the process of setting up an EKS cluster that meets their internal security and scalability standards. They require that the cluster be provisioned using the latest stable Kubernetes version to take advantage of new features and security improvements.
+
+To minimize external exposure, the EKS cluster endpoint must be kept private. Additionally, the cluster needs to use the default VPC with availability zones a, b, and c to ensure high availability across different physical locations.
+
+Your task is to create an EKS cluster named nautilus-eks, with Custom configuration, use IAM role for the cluster named eksClusterRole. Additionally, ensure that EKS Auto Mode is disabled and that the cluster endpoint access is set to private.
+
+Finally, verify that the EKS cluster is successfully created with the correct configuration and is ready for workloads.
+
+
+
+
+Soln:-
+
+Step 1: Create the EKS Cluster Trust Policy (IAM Role Creation)
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "eks.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+
+aws iam create-role \
+  --role-name eksClusterRole \
+  --assume-role-policy-document file://eks-trust-policy.json
+	
+
+
+Step 2: Attach the required policies
+
+aws iam attach-role-policy \
+  --role-name <role-name> \
+  --policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+
+aws iam attach-role-policy \
+  --role-name <role-name> \
+  --policy-arn arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+
+
+
+Step 3:- List your default VPC subnets with AZs
+
+aws ec2 describe-subnets \
+  --filters "Name=vpc-id,Values=$(aws ec2 describe-vpcs --filters Name=isDefault,Values=true --query 'Vpcs[0].VpcId' --output text)" \
+  --query 'Subnets[*].[SubnetId,AvailabilityZone]' \
+  --output table
+
+
+
+Step 4:- EKS Cluster Create
+
+aws eks create-cluster \
+  --region <region-name> \
+  --name <cluster-name> \
+  --role-arn arn:aws:iam::<account-id>:role/eksClusterRole \
+  --resources-vpc-config subnetIds=<subnet-az-1>,<subnet-az-2>,<subnet-az-3>,endpointPublicAccess=false,endpointPrivateAccess=true \
+  --kubernetes-version 1.30
+
+
+
+Step 5:- Verify Cluster Status
+
+aws eks describe-cluster --region <region-name> --name <cluster-name> --query "cluster.status"
