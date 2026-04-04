@@ -1,0 +1,56 @@
+Ques:-
+
+The Nautilus DevOps team is focusing on improving their data security by using AWS KMS. Your task is to create a KMS key and manage the encryption and decryption of a pre-existing sensitive file using the KMS key.
+
+Specific Requirements:
+
+1. Create a symmetric KMS key named nautilus-KMS-Key to manage encryption and decryption.
+2. Encrypt the provided SensitiveData.txt file (located in /root/), base64 encode the ciphertext, and save the encrypted version as EncryptedData.bin in the /root/ directory.
+3. Try to decrypt the same and verify that the decrypted data matches the original file.
+
+Make sure that the KMS key is correctly configured. The validation script will test your configuration by decrypting the EncryptedData.bin file using the KMS key you created.
+
+
+
+
+Soln:-
+
+Step 1:- Create the symmetric KMS key
+
+aws kms create-key \
+    --description "Symmetric key for Nautilus DevOps team" \
+    --key-usage ENCRYPT_DECRYPT \
+    --origin AWS_KMS
+
+
+
+Step 2:- Assign an alias (name) to the key
+
+aws kms create-alias \
+    --alias-name alias/<symmetric-key-name> \
+    --target-key-id <KeyId>
+
+
+
+Step 3:- Encrypt the sensitive file
+
+aws kms encrypt \
+    --key-id alias/<symmetric-key-name> \
+    --plaintext fileb:///root/<source file-name>.txt \
+    --output text \
+    --query CiphertextBlob | base64 --decode > /root/<destination file-name>.bin
+
+
+
+Step 4:- Decrypt the file to verify
+
+aws kms decrypt \
+    --ciphertext-blob fileb:///root/<file-name>.bin \
+    --output text \
+    --query Plaintext | base64 --decode > /root/<file-name>.txt
+
+
+
+Step 5:- Compare original and decrypted file
+
+diff /root/<file-name>.txt /root/<file-name>.txt
