@@ -1,0 +1,459 @@
+Ques:-
+
+The Nautilus DevOps team needs to implement priority queuing using Amazon SQS and SNS. The goal is to create a system where messages with different priorities are handled accordingly. You are required to use AWS CloudFormation to deploy the necessary resources in your AWS account. The CloudFormation template should be created on the AWS client host at /root/xfusion-priority-stack.yml, the stack name must be xfusion-priority-stack and it should create the following resources:
+
+1. Two SQS queues named xfusion-High-Priority-Queue and xfusion-Low-Priority-Queue.
+2. An SNS topic named xfusion-Priority-Queues-Topic.
+3. A Lambda function named xfusion-priorities-queue-function that will consume messages from the SQS queues. The Lambda function code is provided in /root/index.py on the AWS client host.
+4. An IAM role named lambda_execution_role that provides the necessary permissions for the Lambda function to interact with SQS and SNS.
+
+Once the stack is deployed, to test the same you can publish messages to the SNS topic, invoke the Lambda function and observe the order in which they are processed by the Lambda function. The high-priority message must be processed first.
+
+topicarn=$(aws sns list-topics --query "Topics[?contains(TopicArn, 'xfusion-Priority-Queues-Topic')].TopicArn" --output text)
+
+aws sns publish --topic-arn $topicarn --message 'High Priority message 1' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"high"}}'
+
+aws sns publish --topic-arn $topicarn --message 'High Priority message 2' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"high"}}'
+
+aws sns publish --topic-arn $topicarn --message 'Low Priority message 1' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"low"}}'
+
+aws sns publish --topic-arn $topicarn --message 'Low Priority message 2' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"low"}}'
+
+
+
+Soln:-
+
+Step 1:- Create the CloudFormation template file
+
+On the server, create the template at /root/<yml-file-name>.yml with the required resources (You already have the Lambda code in /root/index.py)
+
+cat > /root/<yml-file-name>.yml << 'EOF'
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Priority Queue Processing Stack
+
+Resources:
+  HighPriorityQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: xfusion-High-Priority-Queue
+      VisibilityTimeout: 30
+
+  LowPriorityQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: xfusion-Low-Priority-Queue
+      VisibilityTimeout: 30
+
+  PriorityQueueTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: xfusion-Priority-Queues-Topic
+
+  HighPrioritySubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref PriorityQueueTopic
+      Protocol: sqs
+      Endpoint: !GetAtt HighPriorityQueue.Arn
+      FilterPolicy:
+        priority:
+          - "high"
+
+  LowPrioritySubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref PriorityQueueTopic
+      Protocol: sqs
+      Endpoint: !GetAtt LowPriorityQueue.Arn
+      FilterPolicy:
+        priority:
+          - "low"
+
+  HighPriorityPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref HighPriorityQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: "sqs:SendMessage"
+            Resource: !GetAtt HighPriorityQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref PriorityQueueTopic
+
+  LowPriorityPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref LowPriorityQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: "sqs:SendMessage"
+            Resource: !GetAtt LowPriorityQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref PriorityQueueTopic
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: lambda_execution_role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+        - arn:aws:iam::aws:policy/AmazonSNSFullAccess
+
+  PriorityLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: <lambda-function-name>
+      Runtime: python3.9
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 5
+      Environment:
+        Variables:
+          high_priority_queue: !Ref HighPriorityQueue
+          low_priority_queue: !Ref LowPriorityQueue
+      Code:
+        S3Bucket: <bucket-name>
+        S3Key: function-code.zip
+
+
+
+Step 2:- Create your own S3 bucket first
+
+aws s3 mb s3://<bucket-name> --region <region-name>
+
+
+
+Step 3:- Zip and upload your Lambda code
+
+zip /root/<file-name>.zip /root/<file-name>.py
+aws s3 cp /root/<file-name>.zip s3://<bucket-name>/<file-name>.zip
+
+
+
+Step 4:- Update your CloudFormation template
+
+On the server in "/root/<yml-file-name>.yml", make sure the Lambda function resource points to that bucket: (this block is required to verify in the yml file)
+
+PriorityLambdaFunction:
+  Type: AWS::Lambda::Function
+  Properties:
+    FunctionName: xfusion-priorities-queue-function
+    Handler: index.handler
+    Runtime: python3.9
+    Role: !GetAtt LambdaExecutionRole.Arn
+    Code:
+      S3Bucket: <bucket-name>
+      S3Key: index.zip
+
+
+
+Step 5:- Deploy the stack
+
+aws cloudformation create-stack \
+  --stack-name <priority-stack-name> \
+  --template-body file:///root/<yml-file-name>.yml \
+  --capabilities CAPABILITY_NAMED_IAM
+  
+aws cloudformation wait stack-create-complete --stack-name <priority-stack-name>
+
+
+
+Step 6:- Subscribe queues to the SNS topic
+
+topicarn=$(aws sns list-topics --query "Topics[?contains(TopicArn, '<sns-topic-name>')].TopicArn" --output text)
+
+highqueueurl=$(aws sqs get-queue-url --queue-name xfusion-High-Priority-Queue --query 'QueueUrl' --output text)
+
+lowqueueurl=$(aws sqs get-queue-url --queue-name xfusion-Low-Priority-Queue --query 'QueueUrl' --output text)
+
+aws sns subscribe --topic-arn $topicarn --protocol sqs --notification-endpoint $(aws sqs get-queue-attributes --queue-url $highqueueurl --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+
+aws sns subscribe --topic-arn $topicarn --protocol sqs --notification-endpoint $(aws sqs get-queue-attributes --queue-url $lowqueueurl --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+
+
+
+Step 7:- Test by publishing messages
+
+aws sns publish --topic-arn $topicarn --message 'High Priority message 1' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"high"}}'
+
+aws sns publish --topic-arn $topicarn --message 'High Priority message 2' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"high"}}'
+
+aws sns publish --topic-arn $topicarn --message 'Low Priority message 1' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"low"}}'
+
+aws sns publish --topic-arn $topicarn --message 'Low Priority message 2' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"low"}}'
+
+
+
+Step 8:- Verify CloudFormation stack exists and is complete
+
+aws cloudformation describe-stacks --stack-name <priority-stack-name> \
+  --query 'Stacks[0].StackStatus' --output text
+  
+Output: "CREATE_COMPLETE"
+
+
+
+Step 9:- Get SNS topic ARN
+
+topicarn=$(aws sns list-topics \
+  --query "Topics[?contains(TopicArn, 'xfusion-Priority-Queues-Topic')].TopicArn" \
+  --output text)
+  
+echo "SNS Topic ARN: $topicarn"
+
+Output: "SNS Topic ARN: arn:aws:sns:us-east-1:541882316995:xfusion-Priority-Queues-Topic"
+
+
+
+Step 10:- Get SQS queue URLs
+
+highqueueurl=$(aws sqs get-queue-url --queue-name xfusion-High-Priority-Queue --query 'QueueUrl' --output text)
+lowqueueurl=$(aws sqs get-queue-url --queue-name xfusion-Low-Priority-Queue --query 'QueueUrl' --output text)
+
+echo "High Priority Queue URL: $highqueueurl"
+echo "Low Priority Queue URL: $lowqueueurl"
+
+Output: "High Priority Queue URL: https://queue.amazonaws.com/541882316995/xfusion-High-Priority-Queue
+Low Priority Queue URL: https://queue.amazonaws.com/541882316995/xfusion-Low-Priority-Queue"
+
+
+
+Step 11:- Subscribe queues to SNS topic
+
+aws sns subscribe --topic-arn $topicarn --protocol sqs \
+  --notification-endpoint $(aws sqs get-queue-attributes --queue-url $highqueueurl --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+
+aws sns subscribe --topic-arn $topicarn --protocol sqs \
+  --notification-endpoint $(aws sqs get-queue-attributes --queue-url $lowqueueurl --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+  
+Output: "
+{
+    "SubscriptionArn": "arn:aws:sns:us-east-1:541882316995:xfusion-Priority-Queues-Topic:4aa94559-b979-4483-947a-dd428cb606eb"
+}
+{
+    "SubscriptionArn": "arn:aws:sns:us-east-1:541882316995:xfusion-Priority-Queues-Topic:a271400b-9aa3-474c-8a36-643a34ce0d0b"
+}
+"  
+
+
+
+Step 12:- Connect SQS queues to Lambda (event source mappings)
+
+lambdaarn=$(aws lambda get-function --function-name <lambda-function-name> --query 'Configuration.FunctionArn' --output text)
+
+aws lambda create-event-source-mapping \
+  --function-name $lambdaarn \
+  --event-source-arn $(aws sqs get-queue-attributes --queue-url $highqueueurl --attribute-names QueueArn --query 'Attributes.QueueArn' --output text) \
+  --batch-size 10
+
+aws lambda create-event-source-mapping \
+  --function-name $lambdaarn \
+  --event-source-arn $(aws sqs get-queue-attributes --queue-url $lowqueueurl --attribute-names QueueArn --query 'Attributes.QueueArn' --output text) \
+  --batch-size 10
+  
+Output: "
+{
+    "UUID": "b68875d8-e11b-456b-ad1f-1313dde4ca50",
+    "BatchSize": 10,
+    "MaximumBatchingWindowInSeconds": 0,
+    "EventSourceArn": "arn:aws:sqs:us-east-1:541882316995:xfusion-High-Priority-Queue",
+    "FunctionArn": "arn:aws:lambda:us-east-1:541882316995:function:xfusion-priorities-queue-function",
+    "LastModified": 1775964222.546,
+    "State": "Creating",
+    "StateTransitionReason": "USER_INITIATED",
+    "FunctionResponseTypes": [],
+    "EventSourceMappingArn": "arn:aws:lambda:us-east-1:541882316995:event-source-mapping:b68875d8-e11b-456b-ad1f-1313dde4ca50"
+}
+{
+    "UUID": "1cf84b10-3edd-426c-9fa3-20a883798530",
+    "BatchSize": 10,
+    "MaximumBatchingWindowInSeconds": 0,
+    "EventSourceArn": "arn:aws:sqs:us-east-1:541882316995:xfusion-Low-Priority-Queue",
+    "FunctionArn": "arn:aws:lambda:us-east-1:541882316995:function:xfusion-priorities-queue-function",
+    "LastModified": 1775964224.201,
+    "State": "Creating",
+    "StateTransitionReason": "USER_INITIATED",
+    "FunctionResponseTypes": [],
+    "EventSourceMappingArn": "arn:aws:lambda:us-east-1:541882316995:event-source-mapping:1cf84b10-3edd-426c-9fa3-20a883798530"
+}
+"  
+
+
+
+Step 13:- Publish test messages
+
+aws sns publish --topic-arn $topicarn --message 'High Priority message 1' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"high"}}'
+aws sns publish --topic-arn $topicarn --message 'High Priority message 2' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"high"}}'
+aws sns publish --topic-arn $topicarn --message 'Low Priority message 1' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"low"}}'
+aws sns publish --topic-arn $topicarn --message 'Low Priority message 2' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"low"}}'
+
+Output: "
+{
+    "MessageId": "7c76d935-b1ed-5316-b45c-bb60a2d7371f"
+}
+{
+    "MessageId": "b2731fbc-b68b-5b60-a57c-7de9a5b0b29a"
+}
+{
+    "MessageId": "e1be2679-f6c7-5f3a-9963-442ce5fbf885"
+}
+{
+    "MessageId": "179f82ba-cfec-5d52-82a4-e0efdcd1d5d8"
+}
+"
+
+
+
+
+----------------------------------------2nd Solution--------------------------------------------------------------------
+
+1. Create the file named "xfusion-priority-stack.yml" on the server:-
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Priority Queue Processing Stack
+
+Resources:
+  HighPriorityQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: xfusion-High-Priority-Queue
+      VisibilityTimeout: 30
+
+  LowPriorityQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: xfusion-Low-Priority-Queue
+      VisibilityTimeout: 30
+
+  PriorityQueueTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: xfusion-Priority-Queues-Topic
+
+  HighPrioritySubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref PriorityQueueTopic
+      Protocol: sqs
+      Endpoint: !GetAtt HighPriorityQueue.Arn
+      FilterPolicy:
+        priority:
+          - "high"
+
+  LowPrioritySubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref PriorityQueueTopic
+      Protocol: sqs
+      Endpoint: !GetAtt LowPriorityQueue.Arn
+      FilterPolicy:
+        priority:
+          - "low"
+
+  HighPriorityPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref HighPriorityQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: "sqs:SendMessage"
+            Resource: !GetAtt HighPriorityQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref PriorityQueueTopic
+
+  LowPriorityPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref LowPriorityQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: "sqs:SendMessage"
+            Resource: !GetAtt LowPriorityQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref PriorityQueueTopic
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: lambda_execution_role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+        - arn:aws:iam::aws:policy/AmazonSNSFullAccess
+
+  PriorityLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: <lambda-function-name>
+      Runtime: python3.9
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 5
+      Environment:
+        Variables:
+          high_priority_queue: !Ref HighPriorityQueue
+          low_priority_queue: !Ref LowPriorityQueue
+      Code:
+        S3Bucket: <bucket-name>
+        S3Key: function-code.zip
+
+
+2. aws s3 mb s3://<bucket-name>
+
+3. zip <zip-file-name>.zip index.py
+
+4. aws s3 cp <zip-file-name>.zip s3://<bucket-name>
+
+5. aws s3 ls s3://<bucket-name>
+
+6. aws cloudformation create-stack --stack-name <stack-name> --template-body file:///root/xfusion-priority-stack.yml --capabilities CAPABILITY_NAMED_IAM
+
+7. Verify the CloudFormation Stack, Lambda Function & SQS on the AWS management console and after that run the below mentioned commands
+
+8.  topicarn=$(aws sns list-topics --query "Topics[?contains(TopicArn, '<sns-topic-name>')].TopicArn" --output text)
+
+aws sns publish --topic-arn $topicarn --message 'High Priority message 1' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"high"}}'
+
+aws sns publish --topic-arn $topicarn --message 'High Priority message 2' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"high"}}'
+
+aws sns publish --topic-arn $topicarn --message 'Low Priority message 1' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"low"}}'
+
+aws sns publish --topic-arn $topicarn --message 'Low Priority message 2' --message-attributes '{"priority" : { "DataType":"String", "StringValue":"low"}}'
+
+9. Then open the Lambda Function and Test 4 times one by one for the above provided SNS and check the SQS after all 4 test the message should be counted to 0 on SQS
+
