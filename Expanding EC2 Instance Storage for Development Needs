@@ -1,0 +1,78 @@
+Ques:-
+
+The Nautilus DevOps Team has recently been informed by the Development Team that their EC2 instance is running out of storage space. This instance, crucial for development activities, is named devops-ec2 and currently has an attached volume of 8 GiB. To accommodate the increasing data requirements, the storage needs to be expanded to 12 GiB. This change should ensure that the expanded space is immediately available for use within the instance without disrupting ongoing activities.
+
+1. Identify Volume: Find the volume attached to the devops-ec2 instance.
+
+2. Expand Volume: Increase the volume size from 8 GiB to 12 GiB.
+
+3. Reflect Changes: Ensure the root (/) partition within the instance reflects the expanded size from 8 GiB to 12 GiB.
+
+4. SSH Access: Use the key pair located at /root/devops-keypair.pem on the aws-client host to SSH into the EC2 instance.
+
+
+
+Soln:-
+
+Step 1: Identify the Volume Attached to Instance
+
+aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=<instance-name>" \
+  --query "Reservations[*].Instances[*].[Instances[*].PublicIpAddress,Instances[*].Tags[?Key=='Name'].Value]" \
+  --output text
+
+
+
+Step 2: List the attached volumes to the Instance
+
+aws ec2 describe-volumes \
+  --filters "Name=attachment.instance-id,Values=<INSTANCE_ID>" \
+  --query "Volumes[*].{ID:VolumeId,Size:Size}" \
+  --output table
+
+
+
+Step 3: Expand the Volume from 8 GiB to 12 GiB
+
+aws ec2 modify-volume \
+  --volume-id <VOLUME_ID> \
+  --size <desired-volume-to-increase>
+  
+  
+
+Step 4: Check the volume modification status:
+
+aws ec2 describe-volumes-modifications \
+  --volume-id <VOLUME_ID> \
+  --query "VolumesModifications[*].{Size:TargetSize,State:ModificationState}" \
+  --output table
+
+
+
+Step 5: SSH into the instance using the provided key pair
+
+ssh -i /root/<keypair-name>.pem ec2-user@<PUBLIC_IP_OR_DNS>
+
+
+
+Step 6: Check current disk layout inside the server
+
+lsblk
+
+
+
+Step 7: Resize the root partition (/)
+
+sudo growpart /dev/xvda 1
+
+
+
+Step 8: Resize the Filesystem
+
+sudo xfs_growfs /
+
+
+
+Step 9: Verify
+
+df -h /
