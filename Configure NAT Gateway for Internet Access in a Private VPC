@@ -1,0 +1,107 @@
+Ques:-
+
+The Nautilus DevOps team is tasked with enabling internet access for an EC2 instance running in a private subnet. This instance should be able to upload a test file to a public S3 bucket once it can access the internet. To achieve this, the team must set up a NAT Gateway in a public subnet within the same VPC.
+
+1) A VPC named datacenter-priv-vpc and a private subnet datacenter-priv-subnet have already been created.
+2) An EC2 instance named datacenter-priv-ec2 is already running in the private subnet.
+3) The EC2 instance is configured with a cron job that uploads a test file to a bucket datacenter-nat-31604 once internet is accessible.
+
+Your task is to:
+
+-> Create a public subnet named datacenter-pub-subnet in the same VPC.
+-> Create an Internet Gateway and attach it to the VPC.
+-> Create a route table datacenter-pub-rt and associate it with the public subnet.
+-> Allocate an Elastic IP and create a NAT Gateway named datacenter-natgw.
+-> Update the private route table to route 0.0.0.0/0 traffic via the NAT Gateway.
+-> Once complete, verify that the EC2 instance can reach the internet by confirming the presence of the test file in the S3 bucket datacenter-nat-31604. After completing all the configuration, please wait a few minutes for the test file to appear in the bucket, as it may take 2–3 minutes.
+
+
+
+
+Soln:-
+
+Step 1:- Verify Existing Resources
+
+aws ec2 describe-vpcs --filters "Name=tag:Name,Values=datacenter-priv-vpc"
+aws ec2 describe-subnets --filters "Name=tag:Name,Values=datacenter-priv-subnet"
+aws ec2 describe-instances --filters "Name=tag:Name,Values=datacenter-priv-ec2"
+
+
+
+Step 2:- Create Public Subnet
+
+aws ec2 create-subnet \
+    --vpc-id <VPC_ID> \
+    --cidr-block <cidr-range> \
+    --availability-zone us-east-1a \
+    --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=<subnet-name>}]'
+	
+
+
+Step 3:- Create Internet Gateway and Attach to VPC
+
+aws ec2 create-internet-gateway \
+    --tag-specifications 'ResourceType=internet-gateway,Tags=[{Key=Name,Value=<igw-name>}]'
+
+
+aws ec2 attach-internet-gateway --internet-gateway-id <IGW_ID> --vpc-id <VPC_ID>
+
+
+
+Step 4:- Create Public Route Table and Associate with Public Subnet
+
+aws ec2 create-route-table \
+    --vpc-id <VPC_ID> \
+    --tag-specifications 'ResourceType=route-table,Tags=[{Key=Name,Value=<route-table-name>}]'
+
+aws ec2 associate-route-table --route-table-id <pub-RTB_ID> --subnet-id <pub-SUBNET_ID>
+
+aws ec2 create-route --route-table-id <pub-RTB_ID> --destination-cidr-block 0.0.0.0/0 --gateway-id <IGW_ID>
+
+
+
+Step 5:- Allocate Elastic IP and Create NAT Gateway
+
+aws ec2 allocate-address --domain vpc
+
+aws ec2 create-nat-gateway \
+    --subnet-id <pub-SUBNET_ID> \
+    --allocation-id <eip-ALLOC_ID> \
+    --tag-specifications 'ResourceType=natgateway,Tags=[{Key=Name,Value=<nat-gateway-name>}]'
+
+
+
+Step 6:- Create the dedicated Private Route Table
+
+aws ec2 create-route-table \
+    --vpc-id <vpc-id> \
+    --tag-specifications 'ResourceType=route-table,Tags=[{Key=Name,Value=<pvt-rt-name>}]'
+
+
+
+Step 7:- Associate the private subnet with this private route table
+
+aws ec2 associate-route-table \
+    --route-table-id <rtb-PRIV-ID> \
+    --subnet-id <pvt-subnet-id>
+
+
+
+Step 8:- Add/Replace the default route to NAT Gateway:
+
+aws ec2 create-route \
+    --route-table-id <rtb-PRIV-ID> \
+    --destination-cidr-block 0.0.0.0/0 \
+    --nat-gateway-id <NATGW_ID>
+	
+	
+
+Step 9:- Verify association and routes (You should see: 10.1.0.0/16 → local & 0.0.0.0/0 → nat-xxxxxxxx)
+
+aws ec2 describe-route-tables --filters "Name=vpc-id,Values=<VPC_ID>"
+	
+	
+
+Step 10:- Verification – Check S3 Bucket for Test File
+
+aws s3 ls s3://<bucket-name>/
