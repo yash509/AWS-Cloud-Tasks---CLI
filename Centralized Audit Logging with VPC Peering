@@ -1,0 +1,278 @@
+Ques:-
+
+The Nautilus DevOps team needs to build a secure and scalable log aggregation setup within their AWS environment. The goal is to gather log files from an internal EC2 instance running in a private VPC, transfer them securely to another EC2 instance in a public VPC, and then push those logs to a secure S3 bucket.
+
+1) A VPC named devops-priv-vpc already exists with a private subnet named devops-priv-subnet, a route table named devops-priv-rt, and an EC2 instance named devops-priv-ec2 (using ubuntu image). This instance uses the SSH key pair devops-key.pem already available on the AWS client host at /root/.ssh/.
+
+2) Your task is to:
+
+-> Create a new VPC named devops-pub-vpc.
+
+-> Create a subnet named devops-pub-subnet and a route table named devops-pub-rt under this public VPC.
+
+-> Attach an internet gateway to devops-pub-vpc and configure the public route table to enable internet access.
+
+-> Launch an EC2 instance named devops-pub-ec2 into the public subnet using the same key pair as the private instance.
+
+-> Create an IAM role named devops-s3-role with PutObject permission to an S3 bucket and attach it to the public EC2 instance.
+
+-> Create a new private S3 bucket named devops-s3-logs-31908.
+
+-> Configure a VPC Peering named devops-vpc-peering between the private and public VPCs.
+
+-> Modify both devops-priv-rt and devops-pub-rt to route each other's CIDR blocks through the peering connection.
+
+-> On the private instance, configure a cron job to push the /var/log/boots.log file to the public instance (using scp or rsync).
+
+-> On the public instance, configure a cron job to push that same file to the created S3 bucket.
+
+-> The uploaded file must be stored in the S3 bucket under the path devops-priv-vpc/boot/boots.log.
+
+
+
+
+Soln:
+
+1. Create Public VPC, Subnet, Route Table, and Internet Gateway
+
+
+# Create VPC
+aws ec2 create-vpc --cidr-block 10.1.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=devops-pub-vpc}]'
+
+# Create Subnet
+aws ec2 create-subnet --vpc-id <PUB_VPC_ID> --cidr-block 10.1.1.0/24 --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=devops-pub-subnet}]'
+
+# Create Route Table
+aws ec2 create-route-table --vpc-id <PUB_VPC_ID> --tag-specifications 'ResourceType=route-table,Tags=[{Key=Name,Value=devops-pub-rt}]'
+
+# Create Internet Gateway
+aws ec2 create-internet-gateway --tag-specifications 'ResourceType=internet-gateway,Tags=[{Key=Name,Value=devops-pub-igw}]'
+
+# Attach IGW to VPC
+aws ec2 attach-internet-gateway --internet-gateway-id <IGW_ID> --vpc-id <PUB_VPC_ID>
+
+# Add default route to public route table
+aws ec2 create-route --route-table-id <PUB_RT_ID> --destination-cidr-block 0.0.0.0/0 --gateway-id <IGW_ID>
+
+
+
+2. Launch Public EC2 Instance
+
+
+aws ec2 run-instances \
+  --image-id <UBUNTU_AMI_ID> \
+  --count 1 \
+  --instance-type t2.micro \
+  --key-name devops-key \
+  --subnet-id <PUB_SUBNET_ID> \
+  --associate-public-ip-address \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=devops-pub-ec2}]'
+  
+  
+  
+3. Create IAM Role and Attach to EC2
+
+# Create IAM Role
+aws iam create-role --role-name devops-s3-role --assume-role-policy-document '{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Service": "ec2.amazonaws.com"},
+    "Action": "sts:AssumeRole"
+  }]
+}'
+
+# Attach S3 Policy
+aws iam put-role-policy --role-name devops-s3-role --policy-name devops-s3-policy --policy-document '{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "s3:PutObject",
+    "Resource": "arn:aws:s3:::devops-s3-logs-31908/*"
+  }]
+}'
+
+# Create Instance Profile and Attach Role
+aws iam create-instance-profile --instance-profile-name devops-s3-profile
+aws iam add-role-to-instance-profile --instance-profile-name devops-s3-profile --role-name devops-s3-role
+aws ec2 associate-iam-instance-profile --instance-id <PUB_EC2_ID> --iam-instance-profile Name=devops-s3-profile
+
+
+
+4. Create Secure S3 Bucket
+
+aws s3api create-bucket --bucket devops-s3-logs-31908 --region <REGION> --create-bucket-configuration LocationConstraint=<REGION>
+aws s3api put-bucket-encryption --bucket devops-s3-logs-31908 --server-side-encryption-configuration '{
+  "Rules": [{
+    "ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}
+  }]
+}'
+
+
+
+5. Configure VPC Peering
+
+# Create Peering
+aws ec2 create-vpc-peering-connection --vpc-id <PRIV_VPC_ID> --peer-vpc-id <PUB_VPC_ID> --tag-specifications 'ResourceType=vpc-peering-connection,Tags=[{Key=Name,Value=devops-vpc-peering}]'
+
+# Accept Peering
+aws ec2 accept-vpc-peering-connection --vpc-peering-connection-id <PEERING_ID>
+
+# Update Private Route Table
+aws ec2 create-route --route-table-id <PRIV_RT_ID> --destination-cidr-block 10.1.0.0/16 --vpc-peering-connection-id <PEERING_ID>
+
+# Update Public Route Table
+aws ec2 create-route --route-table-id <PUB_RT_ID> --destination-cidr-block 10.0.0.0/16 --vpc-peering-connection-id <PEERING_ID>
+
+
+
+6. Configure Cron Jobs
+On Private EC2 (devops-priv-ec2)
+
+# Edit crontab
+crontab -e
+
+* * * * * /usr/bin/scp -i /home/ubuntu/.ssh/log_transfer_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /var/log/boots.log ubuntu@REPLACE_WITH_PUBLIC_EC2_PRIVATE_IP:/tmp/boots.log >> /home/ubuntu/scp-transfer.log 2>&1
+
+
+
+7. On Public EC2 (devops-pub-ec2)
+
+# Edit crontab
+crontab -e
+
+* * * * * /snap/bin/aws s3 cp /tmp/boots.log s3://REPLACE_WITH_YOUR_S3_BUCKET_NAME/devops-priv-vpc/boot/boots.log >> /home/ubuntu/s3-upload.log 2>&1
+
+
+
+
+Run the following command (replace <REGION> with your AWS region, e.g., us-east-1):-> Command to get the Ubuntu AMI ID
+
+aws ec2 describe-images \
+  --owners 099720109477 \
+  --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-*-amd64-server-*" \
+  --query 'Images[*].[ImageId,Name,CreationDate]' \
+  --region <REGION> \
+  --output table
+
+🔹 Get Public VPC ID
+
+aws ec2 describe-vpcs \
+  --filters "Name=tag:Name,Values=devops-pub-vpc" \
+  --query "Vpcs[0].VpcId" \
+  --output text
+  
+  
+🔹 Get Internet Gateway (IGW) ID
+
+aws ec2 describe-internet-gateways \
+  --filters "Name=tag:Name,Values=devops-pub-igw" \
+  --query "InternetGateways[0].InternetGatewayId" \
+  --output text
+
+
+🔹 Get Public Route Table (PUB RT) ID
+
+aws ec2 describe-route-tables \
+  --filters "Name=tag:Name,Values=devops-pub-rt" \
+  --query "RouteTables[0].RouteTableId" \
+  --output text
+
+
+🔹 (Optional) Get Subnet ID
+
+aws ec2 describe-subnets \
+  --filters "Name=tag:Name,Values=devops-pub-subnet" \
+  --query "Subnets[0].SubnetId" \
+  --output text
+
+
+🔹 (Optional) Get EC2 Instance ID
+
+aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=devops-pub-ec2" \
+  --query "Reservations[0].Instances[0].InstanceId" \
+  --output text
+  
+ 
+
+-----------------------------------------------Commands to use on Server---------------------------------------------------------------------------------------
+ 
+  
+# === STEP 1: Copy launch key to public instance (run FROM AWS CLINET )
+scp -i /root/.ssh/REPLACE_WITH_YOUR_KEY.pem \
+    /root/.ssh/REPLACE_WITH_YOUR_KEY.pem \
+    ubuntu@REPLACE_WITH_PUBLIC_EC2_PUBLIC_IP:/home/ubuntu/.ssh/REPLACE_WITH_YOUR_KEY.pem
+
+# === STEP 2: SSH into public instance (from AWS CLIENT) ===
+ssh -i /root/.ssh/REPLACE_WITH_YOUR_KEY.pem ubuntu@REPLACE_WITH_PUBLIC_EC2_PUBLIC_IP
+
+# On public instance - secure the copied key
+chmod 400 /home/ubuntu/.ssh/REPLACE_WITH_YOUR_KEY.pem
+
+# === STEP 3: From public instance → connect to private ===
+ssh -i /home/ubuntu/.ssh/REPLACE_WITH_YOUR_KEY.pem ubuntu@REPLACE_WITH_PRIVATE_EC2_PRIVATE_IP
+
+# === STEP 4: On private instance - generate dedicated transfer key ===
+ssh-keygen -t ed25519 -f ~/.ssh/log_transfer_key -C "log-transfer" -N ""
+
+# Show public key (copy the entire output line)
+cat ~/.ssh/log_transfer_key.pub
+
+# Exit private instance (back to public)
+exit
+
+# === STEP 5: On public instance - add the public key you copied ===
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+
+# Paste the full public key line you copied from private instance here
+echo 'ssh-ed25519 PASTE_YOUR_GENERATED_PUBLIC_KEY_HERE log-transfer' >> ~/.ssh/authorized_keys
+
+chmod 600 ~/.ssh/authorized_keys
+
+# === STEP 6: Test SCP (from public → private again) ===
+ssh -i /home/ubuntu/.ssh/REPLACE_WITH_YOUR_KEY.pem ubuntu@REPLACE_WITH_PRIVATE_EC2_PRIVATE_IP
+
+# On private instance - test transfer OPTIONAL
+scp -i ~/.ssh/log_transfer_key \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    /var/log/boots.log ubuntu@REPLACE_WITH_PUBLIC_EC2_PRIVATE_IP:/tmp/boots.log
+
+# === STEP 7: On private instance - add cron job (every minute) ===
+crontab -e
+
+# Add this line (paste into crontab editor):
+* * * * * /usr/bin/scp -i /home/ubuntu/.ssh/log_transfer_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /var/log/boots.log ubuntu@REPLACE_WITH_PUBLIC_EC2_PRIVATE_IP:/tmp/boots.log >> /home/ubuntu/scp-transfer.log 2>&1
+
+# Save and exit editor, then verify:
+crontab -l
+
+# Exit private → back to public
+exit
+
+# === STEP 8: On public instance - install AWS CLI v2 via Snap ===
+sudo apt update
+sudo apt install snapd -y
+sudo snap install aws-cli --classic
+aws --version
+
+# Test manual upload
+aws s3 cp /tmp/boots.log s3://REPLACE_WITH_YOUR_S3_BUCKET_NAME/devops-priv-vpc/boot/boots.log
+
+# === STEP 9: On public instance - add S3 upload cron ===
+crontab -e
+
+# Add this line (paste into crontab editor):
+* * * * * /snap/bin/aws s3 cp /tmp/boots.log s3://REPLACE_WITH_YOUR_S3_BUCKET_NAME/devops-priv-vpc/boot/boots.log >> /home/ubuntu/s3-upload.log 2>&1
+
+# Save and exit, then verify:
+crontab -l
+
+# === STEP 10: Monitoring commands (run on public instance) ===
+tail -f ~/s3-upload.log
+ls -l /tmp/boots.log
+
+# On private instance (optional):
+tail -f ~/scp-transfer.log
