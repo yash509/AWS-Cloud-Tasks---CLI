@@ -1,0 +1,61 @@
+Ques:-
+
+The Nautilus DevOps team needs to create an AMI from an existing instance for backup and scaling purposes. 
+They have an existing EC2 instance named xfusion-ec2 and need to create an AMI named xfusion-ec2-ami from this instance. 
+Additionally, they need to launch a new EC2 instance named xfusion-ec2-new using this AMI.
+
+
+
+
+Soln:-
+
+Step 1:- Identify the Instance ID
+
+aws ec2 describe-instances --filters "Name=tag:Name,Values=<existing-instance-name>"
+
+
+
+Step 2:- Create the AMI
+
+aws ec2 create-image --instance-id <id> --name "<new AMI name>" --description "AMI created from xfusion-ec2 instance" --no-reboot
+
+
+
+Step 3:- Verify AMI Creation
+
+aws ec2 describe-images --image-ids <AMI_ID>
+
+
+
+Step 4:- Create the key pair
+
+aws ec2 create-key-pair \
+    --key-name <keypair-name> \
+    --query 'KeyMaterial' \
+    --output text > <keypair-name>
+	
+	
+	
+Step 5:- Secure the private key file
+
+chmod 400 <keypair-name>.pem
+
+
+
+Step 6:- Use the key pair when launching an instance
+
+aws ec2 run-instances \
+    --image-id <AMI_ID> \
+    --count 1 \
+    --instance-type t2.micro \
+    --key-name <keypair-name> \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=<new-instance-name>}]'
+	
+	
+	
+Step 7:- Verification of the New Instance
+
+aws ec2 describe-instances \
+    --filters "Name=tag:Name,Values=<instance-name>" \
+    --query "Reservations[*].Instances[*].PublicIpAddress" \
+    --output text
