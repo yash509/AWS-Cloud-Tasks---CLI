@@ -1,3 +1,11 @@
+--- Step 0: Preview the existing EC2 Instance
+
+aws ec2 describe-instances \
+  --query "Reservations[].Instances[].{InstanceId:InstanceId,InstanceName:Tags[?Key=='Name']|[0].Value,SGNames:SecurityGroups[].GroupName,SGIds:SecurityGroups[].GroupId}" \
+  --output table
+
+
+
 --- Step 1: Create the Security Group:-
 
 aws ec2 create-security-group \
@@ -88,6 +96,4 @@ aws elbv2 create-listener \
 --- Step 9: Verification:-
 
 aws elbv2 describe-load-balancers --names <alb-name>
-  
-  
-
+curl http://<alb-DNS-name>/
