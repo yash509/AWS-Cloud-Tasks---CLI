@@ -68,11 +68,23 @@ aws ec2 describe-instances \
   --query "Reservations[*].Instances[*].PublicIpAddress" \
   --output text
 
-ssh -i temp-key.pem ubuntu@100.52.218.71 "mkdir -p /root/.ssh && echo $(cat /root/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys"
+
+
+--- Step 8: Connect as the default user
+
+ssh -i /root/.ssh/id_rsa ubuntu@<PUBLIC_IP>
 
 
 
----- Step 8: Step 4: Test Passwordless SSH:-
+--- Step 9: Add your key for root login (Once inside the instance as "ubuntu") run the below commands
+
+sudo mkdir -p /root/.ssh
+sudo cp ~/.ssh/authorized_keys /root/.ssh/authorized_keys
+sudo chown root:root /root/.ssh/authorized_keys
+sudo chmod 600 /root/.ssh/authorized_keys
+
+
+
+---- Step 10: Step 4: Test Passwordless SSH:-
 
 ssh -i /root/.ssh/id_rsa root@X.X.X.X
-
