@@ -34,10 +34,21 @@ aws ec2 authorize-security-group-ingress \
   --protocol tcp \
   --port 80 \
   --cidr 0.0.0.0/0
-  
-  
 
---- Step 4: Launch EC2 Instance:-
+
+--- Step 4: Generate SSH Keys
+
+ssh-keygen -t rsa
+
+
+--- Step 5: Import your public key into AWS
+aws ec2 import-key-pair \
+  --key-name id_rsa \
+  --public-key-material fileb:///root/.ssh/id_rsa.pub
+
+
+
+--- Step 6: Launch EC2 Instance:-
 
 aws ec2 run-instances \
   --image-id ami-0e2c8caa4b6378d8c \
@@ -50,7 +61,7 @@ aws ec2 run-instances \
 
   
   
---- Step 5: Copy Public Key to EC2 Instance
+--- Step 7: Copy Public Key to EC2 Instance
 
 aws ec2 describe-instances \
   --filters "Name=tag:Name,Values=datacenter-ec2" \
@@ -61,7 +72,7 @@ ssh -i temp-key.pem ubuntu@100.52.218.71 "mkdir -p /root/.ssh && echo $(cat /roo
 
 
 
----- Step 6: Step 4: Test Passwordless SSH:-
+---- Step 8: Step 4: Test Passwordless SSH:-
 
 ssh -i /root/.ssh/id_rsa root@X.X.X.X
 
