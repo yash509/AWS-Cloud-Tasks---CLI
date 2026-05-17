@@ -1,0 +1,71 @@
+Ques:-
+
+The Nautilus Development Team is preparing to collaborate with an external partner who requires access to their database for integration and testing purposes. Currently, the RDS instance named nautilus-rds is only accessible within the internal network. To facilitate the collaboration, the team needs to make this RDS instance publicly accessible, allowing the partner to connect remotely. This setup will ensure that the external partner can access the database on the default MySQL port 3306 without any connectivity issues.
+
+As a member of the Nautilus DevOps Team, your task is to perform the following:
+
+1. Existing RDS Instance: The RDS instance nautilus-rds is already created.
+2. Make Publicly Accessible: Make the RDS Instance nautilus-rds publicly accessible.
+3. Default Port: Ensure the RDS instance is accessible on the default port 3306.
+
+
+
+
+Soln:-
+
+Step 1:- Modify the RDS Instance to be Publicly Accessible
+
+aws rds modify-db-instance \
+    --db-instance-identifier nautilus-rds \
+    --publicly-accessible \
+    --apply-immediately
+
+
+
+Step 2:- Get RDS Security Group ID
+
+aws rds describe-db-instances \
+    --db-instance-identifier nautilus-rds \
+    --query "DBInstances[*].VpcSecurityGroups[*].VpcSecurityGroupId" \
+    --output text
+
+
+
+Step 3:- Get the Partner’s Public IP
+
+curl https://checkip.amazonaws.com
+
+
+
+Step 4:- Ensure Security Group Allows Port 3306
+
+aws ec2 authorize-security-group-ingress \
+    --group-id sg-xxxxxxxx \
+    --protocol tcp \
+    --port 3306 \
+    --cidr <partner_public_ip>/32
+
+
+
+Step 5:- Verify the RDS Instance for Public Accessibility
+
+aws rds describe-db-instances \
+    --db-instance-identifier nautilus-rds \
+    --query "DBInstances[*].PubliclyAccessible" \
+    --output text
+
+
+Step 6:- Confirm Security Group Inbound Rule
+
+aws ec2 describe-security-groups \
+    --group-ids sg-xxxxxxxx \
+    --query "SecurityGroups[*].IpPermissions"
+
+
+
+Step 7:- Get the RDS Endpoint
+
+aws rds describe-db-instances \
+    --db-instance-identifier nautilus-rds \
+    --query "DBInstances[*].Endpoint.Address" \
+    --output text
