@@ -1,0 +1,79 @@
+Ques:-
+
+The Nautilus DevOps team is expanding their AWS infrastructure and requires the setup of a private Virtual Private Cloud (VPC) along with a subnet. This VPC and subnet configuration will ensure that resources deployed within them remain isolated from external networks and can only communicate within the VPC. Additionally, the team needs to provision an EC2 instance under the newly created private VPC. This instance should be accessible from within the VPC only, allowing for secure communication and resource management within the AWS environment.
+
+The name of the VPC must be datacenter-priv-vpc, create a subnet named datacenter-priv-subnet under the same. 
+Further, create an EC2 instance named datacenter-priv-ec2 under this VPC. 
+Ensure that the security group rules for the EC2 instance allow access only from within the VPC's CIDR block.
+
+
+
+
+Soln:-
+
+Step 1: Create the VPC
+
+aws ec2 create-vpc \
+    --cidr-block <VPC-CIDR> \
+    --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=<VPC-name>}]'
+
+
+
+Step 2: Create the Subnet
+
+aws ec2 create-subnet \
+    --vpc-id <VpcId> \
+    --cidr-block <subnet-CIDR> \
+    --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=<subnet-name>}]'
+
+
+
+Step 3: Create a Security Group
+
+aws ec2 create-security-group \
+    --group-name <sg-name> \
+    --description "Private SG allowing traffic only within VPC" \
+    --vpc-id <VpcId>
+
+
+
+Step 4: Configure Security Group Rules (Allow inbound traffic only from the VPC CIDR block)
+
+aws ec2 authorize-security-group-ingress \
+    --group-id <GroupId> \
+    --protocol all \
+    --cidr <VPC-CIDR>
+
+
+
+Step 5: Create the Key Pair
+
+aws ec2 create-key-pair \
+  --key-name devops-kp \
+  --key-type rsa \
+  --query 'KeyMaterial' \
+  --output text > devops-kp.pem
+  
+
+
+Step 6: Command to Find AMI ID
+
+aws ec2 describe-images \
+    --owners amazon \
+    --filters "Name=name,Values=amzn2-ami-hvm-*-x86_64-gp2" \
+    --query "Images[*].[ImageId,Name]" \
+    --output table
+
+
+
+Step 7: Launch EC2 Instance
+
+aws ec2 run-instances \
+    --image-id <AMI_ID> \
+    --count 1 \
+    --instance-type t2.micro \
+    --key-name <KeyPairName> \
+    --security-group-ids <GroupId> \
+    --subnet-id <SubnetId> \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=<EC2-instance-name>}]'
+  
