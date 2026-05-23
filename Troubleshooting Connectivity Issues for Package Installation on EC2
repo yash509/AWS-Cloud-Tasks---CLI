@@ -1,0 +1,324 @@
+Ques:-
+
+The Nautilus DevOps team has encountered an issue with an EC2 instance named devops-ec2. They are unable to install any packages on this instance due to connectivity issues. The team needs to identify the root cause of the problem and resolve it to restore normal operations.
+
+Investigate the connectivity issue preventing package installation on the EC2 instance devops-ec2.
+Implement a solution to resolve the connectivity issue and restore package installation capabilities on the EC2 instance.
+
+
+
+
+Soln:-
+
+Step 1: Identify the Instance and Networking Details
+
+aws ec2 describe-instances --filters "Name=tag:Name,Values=<Instance-name>" \
+  --query "Reservations[*].Instances[*].{ID:InstanceId,Subnet:SubnetId,VPC:VpcId,SG:SecurityGroups[*].GroupId}" \
+  --output table
+
+
+
+Step 2: Check Security Group Rules
+
+aws ec2 describe-security-groups --group-ids <sg-id> \
+  --query "SecurityGroups[*].IpPermissions" --output table
+  
+---->
+aws ec2 authorize-security-group-egress --group-id <sg-id> \
+  --protocol tcp --port 80 --cidr 0.0.0.0/0
+
+aws ec2 authorize-security-group-egress --group-id <sg-id> \
+  --protocol tcp --port 443 --cidr 0.0.0.0/0
+
+  
+  
+Step3: Check Subnet Route Table
+
+aws ec2 describe-route-tables --filters "Name=association.subnet-id,Values=<subnet-id>" \
+  --query "RouteTables[*].Routes" --output table
+  
+
+
+Step 4: Create the Internet Gateway
+
+aws ec2 create-internet-gateway
+
+
+
+Step 5: Attach the Internet Gateway to the VPC
+
+aws ec2 attach-internet-gateway --internet-gateway-id <igw-id> --vpc-id <vpc-id>
+
+
+
+Step 6: Get the intenet gateway ID along with the filter to check which IGW attached to which VPC
+
+aws ec2 describe-internet-gateways \
+  --query "InternetGateways[*].{IGW:InternetGatewayId,VPC:Attachments[*].VpcId}" \
+  --output table
+
+
+
+Step 7: Command to create the Route Table
+
+aws ec2 create-route-table --vpc-id <vpc-id>
+
+
+
+Step 8: Associate the Route Table with a Subnet
+
+aws ec2 associate-route-table --route-table-id <rtb-id> --subnet-id <subnet-id>
+
+
+
+Step 9: Add a Default Route to the Internet Gateway
+
+aws ec2 create-route --route-table-id <rtb-id> \
+  --destination-cidr-block 0.0.0.0/0 --gateway-id <igw-id>
+
+
+
+Step 10: Add the route to the RouteTable
+
+aws ec2 create-route --route-table-id <rtb-id> \
+  --destination-cidr-block 0.0.0.0/0 --gateway-id <igw-id>
+
+
+
+Step 11: Verify Network ACLs
+
+aws ec2 describe-network-acls --filters "Name=association.subnet-id,Values=<subnet-id>" \
+  --query "NetworkAcls[*].Entries" --output table
+
+
+
+Step 12: Command to view the NACL ID
+
+aws ec2 describe-network-acls \
+  --filters "Name=association.subnet-id,Values=<subnet-id>" \
+  --query "NetworkAcls[*].{NACL_ID:NetworkAclId,Subnet:Associations[*].SubnetId}" \
+  --output table
+
+
+
+Step 13: Allow outbound HTTP/HTTPS + ephemeral ports
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --ingress \
+  --rule-number 100 \
+  --protocol tcp \
+  --port-range From=1024,To=65535 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --egress \
+  --rule-number 100 \
+  --protocol tcp \
+  --port-range From=80,To=80 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --egress \
+  --rule-number 101 \
+  --protocol tcp \
+  --port-range From=443,To=443 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --egress \
+  --rule-number 102 \
+  --protocol tcp \
+  --port-range From=1024,To=65535 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+  
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --ingress \
+  --rule-number 100 \
+  --protocol tcp \
+  --port-range From=1024,To=65535 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --egress \
+  --rule-number 100 \
+  --protocol tcp \
+  --port-range From=80,To=80 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --egress \
+  --rule-number 101 \
+  --protocol tcp \
+  --port-range From=443,To=443 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --egress \
+  --rule-number 102 \
+  --protocol tcp \
+  --port-range From=1024,To=65535 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --ingress \
+  --rule-number 101 \
+  --protocol tcp \
+  --port-range From=1024,To=65535 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --ingress \
+  --rule-number 102 \
+  --protocol 1 \
+  --icmp-type-code Type=-1,Code=-1 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --ingress \
+  --rule-number 103 \
+  --protocol udp \
+  --port-range From=1024,To=65535 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --ingress \
+  --rule-number 104 \
+  --protocol tcp \
+  --port-range From=1024,To=65535 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+  
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --ingress \
+  --rule-number 105 \
+  --protocol udp \
+  --port-range From=1024,To=65535 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --ingress \
+  --rule-number 106 \
+  --protocol udp \
+  --port-range From=53,To=53 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --ingress \
+  --rule-number 104 \
+  --protocol tcp \
+  --port-range From=1024,To=65535 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+  
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --ingress \
+  --rule-number 105 \
+  --protocol udp \
+  --port-range From=1024,To=65535 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --ingress \
+  --rule-number 106 \
+  --protocol udp \
+  --port-range From=53,To=53 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --ingress \
+  --rule-number 107 \
+  --protocol 1 \
+  --icmp-type-code Type=-1,Code=-1 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+  
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --egress \
+  --rule-number 109 \
+  --protocol udp \
+  --port-range From=53,To=53 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+
+aws ec2 create-network-acl-entry \
+  --network-acl-id <nacl-id> \
+  --egress \
+  --rule-number 110 \
+  --protocol 1 \
+  --icmp-type-code Type=-1,Code=-1 \
+  --cidr-block 0.0.0.0/0 \
+  --rule-action allow
+
+
+
+Step 14: Security Group Egress (allow all outbound)
+
+aws ec2 authorize-security-group-egress \
+  --group-id <sg-id> \
+  --protocol -1 \
+  --cidr 0.0.0.0/0
+
+
+
+Step 15: Verify NACL association
+
+aws ec2 describe-network-acls --filters "Name=association.subnet-id,Values=<subnet-id>" \
+  --query "NetworkAcls[*].Entries" --output table
+
+
+
+Step 16: Check Instance-Level Settings (Confirm the instance has a public IP or Elastic IP)
+
+aws ec2 describe-instances --instance-ids <instance-id> \
+  --query "Reservations[*].Instances[*].PublicIpAddress" --output text
+
+
+
+Step 17: If missing, associate an Elastic IP
+
+aws ec2 allocate-address --domain vpc
+aws ec2 associate-address --instance-id <instance-id> --allocation-id <alloc-id>
+
+
+
+Step 18: Test Connectivity
+
+ping google.com
+curl -I https://www.google.com
+sudo yum install -y wget   # (Amazon Linux)
+sudo apt-get install -y wget  # (Ubuntu/Debian)
